@@ -1,0 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 玻璃拟态样式 */
+.glass {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* 手机视口 */
+.phone-viewport {
+  height: calc(100% - 3rem - 5rem);
+  padding-bottom: 5rem;
+}
+
+/* 卡片悬浮效果 */
+.card-hover {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@media (min-width: 768px) {
+  .card-hover:hover {
+    transform: scale(1.02);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+    animation: pulse-shadow 1.5s infinite;
+  }
+}
+
+/* 线条绘制动画 */
+.line-chart path {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: lineDraw 2s ease-out forwards;
+}
+
+/* 状态栏 */
+.status-bar {
+  background: rgba(0,0,0,0.8);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Tab栏 */
+.tab-bar {
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+}
+
+/* 波形动画 */
+.waveform {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: lineDraw 1.5s ease-in-out infinite alternate;
+}
+
+/* Tab项目过渡 */
+.tab-item i {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* 字体设置 */
+* {
+  font-family: 'Poppins', sans-serif;
+}
+
+/* 基础样式 */
+body {
+  background: linear-gradient(135deg, #f8fafc 0%, #fef3c7 100%);
+}
+
+/* 图表动画 */
+@keyframes drawLine {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 动画类 */
+.animate-draw {
+  animation: drawLine 3s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.6s ease-out forwards;
+}
+
+.animate-bounce-in {
+  animation: bounceIn 0.8s ease-out forwards;
+}
