@@ -1,51 +1,246 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 
+const formatTime = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
 export default function AudioGenPage() {
   const [text, setText] = useState('');
-  const [voice, setVoice] = useState('female-1');
+  const [voice, setVoice] = useState('nova');
   const [speed, setSpeed] = useState('normal');
   const [quality, setQuality] = useState('high');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState('00:00');
+  const [duration, setDuration] = useState('00:00');
 
-  const handleGenerate = () => {
+  // 清理函数：组件卸载时清理blob URL和停止TTS
+  useEffect(() => {
+    return () => {
+      // 停止任何正在进行的TTS播放
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      
+      // 清理blob URL
+      if (generatedAudio && generatedAudio.startsWith('blob:')) {
+        URL.revokeObjectURL(generatedAudio);
+      }
+    };
+  }, [generatedAudio]);
+
+  const handleGenerate = async () => {
     if (!text.trim()) {
       return;
     }
     
     setIsGenerating(true);
     setGeneratedAudio(null);
+    setError(null);
+    setGenerationProgress('正在连接AI服务器...');
     
-    setTimeout(() => {
-      // 模拟生成的音频URL
-      setGeneratedAudio('https://www.soundjay.com/misc/sounds/bell-ringing-05.wav');
+    try {
+      // 使用API代理端点解决CORS问题
+      const apiUrl = '/api/audio/generate';
+      
+      console.log('生成音频:', { text, voice, speed, quality, apiUrl });
+
+      setGenerationProgress('正在生成语音...');
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          voice,
+          speed,
+          quality
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      setGenerationProgress('正在处理音频...');
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || result.message || '生成失败');
+      }
+
+      setGeneratedAudio(result.audioUrl);
+      setGenerationProgress('语音生成完成！');
       setIsGenerating(false);
-    }, 3000);
+      console.log('音频生成成功:', result.audioUrl, 'size:', result.size, 'type:', result.type);
+
+    } catch (error) {
+      console.warn('API调用失败，尝试使用免费备选方案:', error);
+      
+      // 使用免费的浏览器TTS API作为备选
+      if (error instanceof Error && (error.message.includes('402') || error.message.includes('Payment Required'))) {
+        await generateWithBrowserTTS();
+      } else {
+        console.warn('其他错误:', error);
+        setError(error instanceof Error ? error.message : '生成过程中出现未知错误');
+        setGenerationProgress('');
+        setIsGenerating(false);
+      }
+    }
+  };
+
+  const generateWithBrowserTTS = async () => {
+    try {
+      setGenerationProgress('准备TTS语音生成...');
+      
+      // 创建一个假的音频URL来显示播放控制界面
+      // TTS实际上是实时播放的，不生成文件
+      const fakeAudioUrl = 'data:audio/wav;base64,';
+      
+      // 设置TTS文本，但不立即播放
+      setGenerationProgress('TTS语音准备完成，请点击播放按钮播放');
+      setGeneratedAudio(fakeAudioUrl);
+      setIsGenerating(false);
+      
+    } catch (error) {
+      console.error('TTS准备失败:', error);
+      setError('TTS语音准备失败，请重试');
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!generatedAudio) return;
+    
+    try {
+      const response = await fetch(generatedAudio);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ai-audio-${Date.now()}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('下载失败:', error);
+      alert('下载失败，请重试');
+    }
+  };
+
+  const handleShare = () => {
+    if (navigator.share && generatedAudio) {
+      navigator.share({
+        title: 'AI生成的语音',
+        text: '我用iFlow AI生成了这段语音！',
+        url: generatedAudio
+      }).catch(console.error);
+    } else if (generatedAudio) {
+      // 降级方案：复制到剪贴板
+      navigator.clipboard.writeText(generatedAudio).then(() => {
+        alert('音频链接已复制到剪贴板');
+      }).catch(() => {
+        alert('分享功能不可用');
+      });
+    } else {
+      alert('暂无可分享的内容');
+    }
+  };
+
+  const handleFavorite = () => {
+    // TODO: 实现收藏功能
+    alert('收藏功能即将推出！');
+  };
+
+  const handlePlayPause = () => {
+    // 检查是否是TTS音频（fakeAudioUrl以data:audio/wav;base64,开头）
+    const isTTSAudio = generatedAudio && generatedAudio.startsWith('data:audio/wav;base64,');
+    
+    if (isTTSAudio) {
+      // 处理TTS播放
+      if (isPlaying) {
+        // 停止TTS播放
+        speechSynthesis.cancel();
+        setIsPlaying(false);
+        setCurrentTime('00:00');
+      } else {
+        // 开始TTS播放
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // 尝试选择合适的中文声音
+        const voices = speechSynthesis.getVoices();
+        const chineseVoice = voices.find(v => v.lang.includes('zh') || v.name.includes('Chinese'));
+        if (chineseVoice) {
+          utterance.voice = chineseVoice;
+        }
+        
+        // 设置默认参数
+        utterance.rate = 1.0;
+        utterance.volume = 1.0;
+        utterance.pitch = 1.0;
+
+        // 设置TTS完成回调
+        utterance.onend = () => {
+          setIsPlaying(false);
+          setCurrentTime('00:00');
+        };
+
+        utterance.onerror = (event) => {
+          setError('TTS播放失败：' + event.error);
+          setIsPlaying(false);
+        };
+
+        // 开始播放TTS
+        speechSynthesis.speak(utterance);
+        setIsPlaying(true);
+      }
+    } else {
+      // 处理普通音频文件播放
+      const audio = document.getElementById('audio-player') as HTMLAudioElement;
+      if (audio) {
+        if (isPlaying) {
+          audio.pause();
+        } else {
+          audio.play();
+        }
+        setIsPlaying(!isPlaying);
+      }
+    }
   };
 
   const voices = [
-    { value: 'female-1', label: '温柔女声' },
-    { value: 'male-1', label: '成熟男声' },
-    { value: 'female-2', label: '活泼女声' },
-    { value: 'male-2', label: '青年男声' },
-    { value: 'child', label: '儿童声音' },
-    { value: 'elder', label: '老年声音' }
+    { value: 'nova', label: '温柔女声', description: '温暖、自然的女性声音，适合朗读和播报' },
+    { value: 'alloy', label: '中性声音', description: '清晰、稳重的中性声音，适合各种场景' },
+    { value: 'shimmer', label: '活泼女声', description: '年轻、有活力的女性声音，适合故事和对话' },
+    { value: 'echo', label: '成熟男声', description: '深沉、权威的男性声音，适合正式场合' },
+    { value: 'fable', label: '温和男声', description: '亲切、友好的男性声音，适合教学和介绍' },
+    { value: 'onyx', label: '低沉男声', description: '厚重、低沉的男性声音，适合配音和朗读' }
   ];
 
   const speeds = [
-    { value: 'slow', label: '慢速' },
-    { value: 'normal', label: '正常' },
-    { value: 'fast', label: '快速' }
+    { value: '0.8', label: '慢速', description: '语速较慢，便于理解' },
+    { value: '1.0', label: '正常', description: '自然语速，平衡清晰度' },
+    { value: '1.2', label: '快速', description: '语速较快，适合快速阅读' }
   ];
 
   const qualities = [
-    { value: 'standard', label: '标准' },
-    { value: 'high', label: '高质量' },
-    { value: 'ultra', label: '超高质量' }
+    { value: 'standard', label: '标准音质', description: '128kbps，适合一般用途' },
+    { value: 'high', label: '高质量', description: '256kbps，清晰度高' },
+    { value: 'ultra', label: '超高质量', description: '320kbps，专业级音质' }
   ];
 
   return (
@@ -79,61 +274,29 @@ export default function AudioGenPage() {
                   />
                 </div>
 
-                {/* 生成参数设置 - 三个下拉列表横向排布 */}
+                {/* 生成参数设置 - 声音选择 */}
                 <div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {/* 声音选择 */}
-                    <div className="relative">
-                      <select
-                        value={voice}
-                        onChange={(e) => setVoice(e.target.value)}
-                        className="w-full p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-slate-200/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all appearance-none cursor-pointer text-sm text-center"
-                      >
-                        {voices.map((v) => (
-                          <option key={v.value} value={v.value}>
-                            {v.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <i className="fas fa-chevron-down text-slate-400 text-xs"></i>
-                      </div>
-                    </div>
-
-                    {/* 语速选择 */}
-                    <div className="relative">
-                      <select
-                        value={speed}
-                        onChange={(e) => setSpeed(e.target.value)}
-                        className="w-full p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-slate-200/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all appearance-none cursor-pointer text-sm text-center"
-                      >
-                        {speeds.map((s) => (
-                          <option key={s.value} value={s.value}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <i className="fas fa-chevron-down text-slate-400 text-xs"></i>
-                      </div>
-                    </div>
-
-                    {/* 音质选择 */}
-                    <div className="relative">
-                      <select
-                        value={quality}
-                        onChange={(e) => setQuality(e.target.value)}
-                        className="w-full p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-slate-200/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all appearance-none cursor-pointer text-sm text-center"
-                      >
-                        {qualities.map((q) => (
-                          <option key={q.value} value={q.value}>
-                            {q.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <i className="fas fa-chevron-down text-slate-400 text-xs"></i>
-                      </div>
+                  <div className="relative">
+                    <select
+                      value={voice}
+                      onChange={(e) => setVoice(e.target.value)}
+                      className="w-full p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-slate-200/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all appearance-none cursor-pointer text-sm"
+                    >
+                      {[
+                        { value: 'alloy', label: 'Alloy - 中性、专业' },
+                        { value: 'echo', label: 'Echo - 深沉、浑厚' },
+                        { value: 'fable', label: 'Fable - 故事讲述者' },
+                        { value: 'onyx', label: 'Onyx - 温暖、丰富' },
+                        { value: 'nova', label: 'Nova - 明亮、友好' },
+                        { value: 'shimmer', label: 'Shimmer - 柔和、旋律' }
+                      ].map((v) => (
+                        <option key={v.value} value={v.value}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                      <i className="fas fa-chevron-down text-slate-400 text-xs"></i>
                     </div>
                   </div>
                 </div>
@@ -166,7 +329,7 @@ export default function AudioGenPage() {
             </GlassCard>
 
             {/* 生成结果展示 */}
-            {(generatedAudio || isGenerating) && (
+            {(generatedAudio || isGenerating || error) && (
               <GlassCard className="hover:shadow-xl transition-shadow duration-300">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-slate-800 mb-4">生成结果</h3>
@@ -175,30 +338,82 @@ export default function AudioGenPage() {
                     <div className="flex flex-col items-center justify-center py-12">
                       <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                       <p className="text-slate-600 mb-2">正在生成中...</p>
-                      <p className="text-sm text-slate-500">请稍候，这可能需要几秒钟</p>
+                      <p className="text-sm text-slate-500 mb-2">{generationProgress}</p>
+                      <p className="text-xs text-slate-400">通常需要5-15秒，请耐心等待</p>
+                    </div>
+                  ) : error ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                        <i className="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+                      </div>
+                      <p className="text-red-600 mb-2">生成失败</p>
+                      <p className="text-sm text-slate-600 mb-4 text-center max-w-md">{error}</p>
+                      <button 
+                        onClick={handleGenerate}
+                        className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                      >
+                        重新尝试
+                      </button>
                     </div>
                   ) : generatedAudio ? (
                     <div className="space-y-4">
                       {/* 音频播放器 */}
                       <div className="bg-gradient-to-br from-emerald-50 to-cyan-50 rounded-xl p-6">
                         <div className="flex items-center justify-center mb-4">
-                          <i className="fas fa-play-circle text-emerald-500 text-6xl cursor-pointer hover:scale-110 transition-transform"></i>
+                          <i 
+                            className={`fas ${isPlaying ? 'fa-pause-circle' : 'fa-play-circle'} text-emerald-500 text-6xl cursor-pointer hover:scale-110 transition-transform`}
+                            onClick={handlePlayPause}
+                          ></i>
                         </div>
+                        
+                        {/* 隐藏的音频元素 */}
+                        <audio 
+                          id="audio-player"
+                          src={generatedAudio}
+                          onPlay={() => setIsPlaying(true)}
+                          onPause={() => setIsPlaying(false)}
+                          onLoadedMetadata={() => {
+                            const audio = document.getElementById('audio-player') as HTMLAudioElement;
+                            if (audio) {
+                              const duration = audio.duration;
+                              setDuration(formatTime(duration));
+                            }
+                          }}
+                          onTimeUpdate={() => {
+                            const audio = document.getElementById('audio-player') as HTMLAudioElement;
+                            if (audio) {
+                              setCurrentTime(formatTime(audio.currentTime));
+                            }
+                          }}
+                          style={{ display: 'none' }}
+                        ></audio>
                         
                         {/* 音频控制条 */}
                         <div className="space-y-4">
                           <div className="flex items-center space-x-4">
-                            <button className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white hover:bg-emerald-600 transition-colors">
-                              <i className="fas fa-play"></i>
+                            <button 
+                              onClick={handlePlayPause}
+                              className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white hover:bg-emerald-600 transition-colors"
+                            >
+                              <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`}></i>
                             </button>
                             <div className="flex-1">
-                              <div className="flex justify-between text-sm text-slate-600 mb-1">
-                                <span>00:00</span>
-                                <span>03:45</span>
-                              </div>
-                              <div className="w-full bg-slate-200 rounded-full h-2">
-                                <div className="bg-emerald-500 h-2 rounded-full w-0"></div>
-                              </div>
+                              {generatedAudio && generatedAudio.startsWith('data:audio/wav;base64,') ? (
+                                <div className="text-center text-sm text-slate-600 py-2">
+                                  <span className="text-amber-600 font-medium">TTS实时语音</span>
+                                  <p className="text-xs text-slate-500 mt-1">点击播放按钮开始/暂停TTS语音</p>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex justify-between text-sm text-slate-600 mb-1">
+                                    <span>{currentTime}</span>
+                                    <span>{duration}</span>
+                                  </div>
+                                  <div className="w-full bg-slate-200 rounded-full h-2">
+                                    <div className="bg-emerald-500 h-2 rounded-full w-0" style={{width: '0%'}}></div>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -206,8 +421,10 @@ export default function AudioGenPage() {
                       
                       {/* 音频信息 */}
                       <div className="bg-slate-50 rounded-lg p-4">
-                        <h4 className="font-medium text-slate-800 mb-2">音频信息</h4>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                        <h4 className="font-medium text-slate-800 mb-2">
+                          {generatedAudio && generatedAudio.startsWith('data:audio/wav;base64,') ? 'TTS信息' : '音频信息'}
+                        </h4>
+                        <div className="grid grid-cols-1 gap-2 text-sm">
                           <div>
                             <span className="text-slate-600">文本:</span>
                             <span className="ml-2 font-medium text-slate-800">{text}</span>
@@ -216,28 +433,54 @@ export default function AudioGenPage() {
                             <span className="text-slate-600">声音:</span>
                             <span className="ml-2 font-medium text-slate-800">{voices.find(v => v.value === voice)?.label}</span>
                           </div>
-                          <div>
-                            <span className="text-slate-600">语速:</span>
-                            <span className="ml-2 font-medium text-slate-800">{speeds.find(s => s.value === speed)?.label}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">音质:</span>
-                            <span className="ml-2 font-medium text-slate-800">{qualities.find(q => q.value === quality)?.label}</span>
-                          </div>
+                          {generatedAudio && generatedAudio.startsWith('data:audio/wav;base64,') ? (
+                            <>
+                              <div>
+                                <span className="text-slate-600">类型:</span>
+                                <span className="ml-2 font-medium text-slate-800">浏览器TTS</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-600">状态:</span>
+                                <span className="ml-2 font-medium text-slate-800 text-amber-600">免费版本</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                <span className="text-slate-600">语速:</span>
+                                <span className="ml-2 font-medium text-slate-800">{speeds.find(s => s.value === speed)?.label}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-600">音质:</span>
+                                <span className="ml-2 font-medium text-slate-800">{qualities.find(q => q.value === quality)?.label}</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                       
                       {/* 操作按钮 */}
                       <div className="flex gap-3">
-                        <button className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
-                          <i className="fas fa-download mr-2"></i>
-                          下载
-                        </button>
-                        <button className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        {!(generatedAudio && generatedAudio.startsWith('data:audio/wav;base64,')) && (
+                          <button 
+                            onClick={handleDownload}
+                            className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                          >
+                            <i className="fas fa-download mr-2"></i>
+                            下载
+                          </button>
+                        )}
+                        <button 
+                          onClick={handleShare}
+                          className={`${generatedAudio && generatedAudio.startsWith('data:audio/wav;base64,') ? 'flex-1' : 'flex-1'} bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors`}
+                        >
                           <i className="fas fa-share mr-2"></i>
                           分享
                         </button>
-                        <button className="flex-1 bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        <button 
+                          onClick={handleFavorite}
+                          className={`${generatedAudio && generatedAudio.startsWith('data:audio/wav;base64,') ? 'flex-1' : 'flex-1'} bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors`}
+                        >
                           <i className="fas fa-heart mr-2"></i>
                           收藏
                         </button>

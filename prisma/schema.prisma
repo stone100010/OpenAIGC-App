@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String          @id @default(uuid())
+  username        String          @unique
+  email           String          @unique
+  passwordHash    String
+  inviteCode      String
+  isActive        Boolean         @default(true)
+  isVerified      Boolean         @default(false)
+  isPro           Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  lastLoginAt     DateTime?
+  emailVerifiedAt DateTime?
+  
+  // 关联关系
+  sessions        UserSession[]
+  profile         UserProfile?
+  stats           UserStats?
+  artworks        UserArtwork[]
+  favorites       UserFavorite[]
+  preferences     UserPreference[]
+  
+  // 反向关系
+  createdInviteCodes InviteCode[] @relation("CreatedBy")
+  usedInviteCodes    InviteCode[] @relation("UsedBy")
+  
+  @@map("users")
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  sessionToken String   @unique
+  refreshToken String?  @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  ipAddress    String?
+  userAgent    String?
+  isActive     Boolean  @default(true)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_sessions")
+}
+
+model UserProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  displayName String?
+  avatarUrl   String?
+  bio         String?
+  joinDate    DateTime @default(now())
+  timezone    String   @default("UTC")
+  language    String   @default("zh-CN")
+  theme       String   @default("light")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_profiles")
+}
+
+model UserStats {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  artworksCount        Int      @default(0)
+  totalDurationMinutes Int      @default(0)
+  likesReceived        Int      @default(0)
+  proExpiresAt         DateTime?
+  lastActivityAt       DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_stats")
+}
+
+model UserArtwork {
+  id           String    @id @default(uuid())
+  userId       String
+  title        String
+  description  String?
+  contentType  String    // 'image', 'audio', 'video', 'text'
+  contentUrl   String?
+  thumbnailUrl String?
+  prompt       String?
+  parameters   Json?
+  isPublic     Boolean   @default(false)
+  likesCount   Int       @default(0)
+  viewsCount   Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  favorites  UserFavorite[]
+  
+  @@map("user_artworks")
+}
+
+model UserFavorite {
+  id         String   @id @default(uuid())
+  userId     String
+  artworkId  String
+  createdAt  DateTime @default(now())
+  
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artwork UserArtwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, artworkId])
+  @@map("user_favorites")
+}
+
+model UserPreference {
+  id          String   @id @default(uuid())
+  userId      String
+  settingKey  String
+  settingValue Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, settingKey])
+  @@map("user_preferences")
+}
+
+model InviteCode {
+  id          String     @id @default(uuid())
+  code        String     @unique
+  codeType    String     @default("standard") // 'standard', 'pro', 'admin'
+  description String?
+  maxUses     Int        @default(1)
+  usedCount   Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdBy   String?
+  createdAt   DateTime   @default(now())
+  expiresAt   DateTime?
+  usedBy      String?
+  usedAt      DateTime?
+  
+  // 关联关系
+  creator User? @relation("CreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  user    User? @relation("UsedBy", fields: [usedBy], references: [id], onDelete: SetNull)
+  
+  // 反向关系
+  usage   InviteCodeUsage[]
+  
+  @@map("invite_codes")
+}
+
+model InviteCodeUsage {
+  id            String     @id @default(uuid())
+  inviteCodeId  String
+  userId        String
+  usedAt        DateTime   @default(now())
+  ipAddress     String?
+  userAgent     String?
+  
+  inviteCode InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("invite_code_usage")
+}

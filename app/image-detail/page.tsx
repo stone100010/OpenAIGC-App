@@ -1,13 +1,71 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
 import Link from 'next/link';
 
+// 作品数据类型
+interface WorkData {
+  id: string;
+  title: string;
+  description: string;
+  content_type: string;
+  content_data: any;
+  media_url?: string;
+  thumbnail_url?: string;
+  tags: string[];
+  duration?: number;
+  views_count: number;
+  likes_count: number;
+  created_at: string;
+  creator: {
+    username: string;
+    email: string;
+  };
+}
+
 export default function ImageDetailPage() {
   const [isLiked, setIsLiked] = useState(false);
+  const [workData, setWorkData] = useState<WorkData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const workId = searchParams.get('id');
+
+  // 获取作品数据
+  const fetchWorkData = async (id: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/creative-works-single?id=${id}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setWorkData(data.data);
+      } else {
+        setError(data.message || '获取作品信息失败');
+      }
+    } catch (error) {
+      console.error('获取作品数据失败:', error);
+      setError('网络错误，请稍后重试');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 组件加载时获取数据
+  useEffect(() => {
+    if (workId) {
+      fetchWorkData(workId);
+    } else {
+      setError('作品ID缺失');
+      setIsLoading(false);
+    }
+  }, [workId]);
 
   const handleEdit = () => {
     alert('重新编辑作品...');
@@ -29,28 +87,61 @@ export default function ImageDetailPage() {
     alert('举报作品...');
   };
 
-  const artworkImage = 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&w=600&h=600&fit=crop';
+  // 生成相关作品（模拟）
+  const getRelatedArtworks = () => {
+    if (!workData) return [];
+    
+    return [
+      {
+        id: 1,
+        src: workData.thumbnail_url || workData.media_url || '',
+        title: '相关作品1',
+        type: 'image'
+      },
+      {
+        id: 2,
+        src: workData.thumbnail_url || workData.media_url || '',
+        title: '相关作品2',
+        type: 'image'
+      },
+      {
+        id: 3,
+        src: workData.thumbnail_url || workData.media_url || '',
+        title: '相关作品3',
+        type: 'image'
+      }
+    ];
+  };
 
-  const relatedArtworks = [
-    {
-      id: 1,
-      src: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-      title: '抽象艺术',
-      type: 'image'
-    },
-    {
-      id: 2,
-      src: 'https://images.unsplash.com/photo-1541961017774-22349e4a1262?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-      title: '未来科技',
-      type: 'image'
-    },
-    {
-      id: 3,
-      src: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-      title: '数字艺术',
-      type: 'image'
-    }
-  ];
+  // 加载状态
+  if (isLoading) {
+    return (
+      <div className="min-h-screen pb-24 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">加载作品信息中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 错误状态
+  if (error || !workData) {
+    return (
+      <div className="min-h-screen pb-24 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">😕</div>
+          <h3 className="text-xl font-semibold text-slate-700 mb-2">作品不存在</h3>
+          <p className="text-slate-500 mb-4">{error || '未找到作品信息'}</p>
+          <Link href="/home">
+            <button className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+              返回首页
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-24">
@@ -61,8 +152,8 @@ export default function ImageDetailPage() {
             {/* 主图像展示 */}
             <div className="relative glass rounded-3xl overflow-hidden group aspect-square">
               <Image
-                src={artworkImage}
-                alt="作品预览"
+                src={workData.thumbnail_url || workData.media_url || '/placeholder-image.jpg'}
+                alt={workData.title}
                 fill
                 className="object-cover transition-transform duration-300 group-hover:scale-105"
                 sizes="(max-width: 1024px) 100vw, 66vw"
@@ -124,21 +215,23 @@ export default function ImageDetailPage() {
           <div className="space-y-6">
             {/* 作品信息 */}
             <GlassCard className="hover:shadow-xl transition-shadow duration-300">
-              <h2 className="text-2xl font-bold text-slate-800 mb-3">梦幻森林</h2>
-              <p className="text-slate-600 mb-4">AI生成 • 图片 • 2025年11月</p>
+              <h2 className="text-2xl font-bold text-slate-800 mb-3">{workData.title}</h2>
+              <p className="text-slate-600 mb-4">
+                AI生成 • {workData.content_type} • {new Date(workData.created_at).toLocaleDateString('zh-CN')}
+              </p>
               
               {/* 统计信息 */}
               <div className="grid grid-cols-3 gap-4 mb-6 text-center">
                 <div>
-                  <div className="text-2xl font-bold text-blue-600">2.4k</div>
+                  <div className="text-2xl font-bold text-blue-600">{workData.views_count}</div>
                   <div className="text-sm text-slate-600">浏览</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-red-500">156</div>
+                  <div className="text-2xl font-bold text-red-500">{workData.likes_count}</div>
                   <div className="text-sm text-slate-600">点赞</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-green-600">23</div>
+                  <div className="text-2xl font-bold text-green-600">{Math.floor(workData.likes_count * 0.1)}</div>
                   <div className="text-sm text-slate-600">收藏</div>
                 </div>
               </div>
@@ -147,8 +240,7 @@ export default function ImageDetailPage() {
               <div className="mb-6">
                 <h3 className="font-semibold text-slate-800 mb-2">作品描述</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  这幅AI生成的图片作品展现了梦幻般的森林场景，充满了神秘和想象力。
-                  柔和的色彩和光影效果营造出超现实的氛围，引人入胜。
+                  {workData.description}
                 </p>
               </div>
 
@@ -156,7 +248,7 @@ export default function ImageDetailPage() {
               <div className="mb-6">
                 <h3 className="font-semibold text-slate-800 mb-3">标签</h3>
                 <div className="flex flex-wrap gap-2">
-                  {['AI艺术', '图片生成', '梦幻', '森林', '超现实'].map((tag) => (
+                  {workData.tags.map((tag) => (
                     <span
                       key={tag}
                       className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full hover:bg-blue-200 transition-colors cursor-pointer"
@@ -176,7 +268,7 @@ export default function ImageDetailPage() {
                   <i className="fas fa-user text-white"></i>
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-medium text-slate-800">AI创作助手</h4>
+                  <h4 className="font-medium text-slate-800">{workData.creator.username}</h4>
                   <p className="text-sm text-slate-600">专业AI艺术家</p>
                 </div>
                 <button className="text-primary hover:text-blue-600 font-medium text-sm">
@@ -191,8 +283,8 @@ export default function ImageDetailPage() {
         <div className="mt-12">
           <h3 className="text-2xl font-bold text-slate-800 mb-6">相关作品</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {relatedArtworks.map((artwork) => (
-              <Link key={artwork.id} href="/image-detail">
+            {getRelatedArtworks().map((artwork) => (
+              <Link key={artwork.id} href={`/image-detail?id=${workData.id}`}>
                 <div className="group cursor-pointer">
                   <div className="relative aspect-square overflow-hidden rounded-xl shadow-md">
                     <Image

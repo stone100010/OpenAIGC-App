@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
 
 const menuItems = [
   { 
@@ -47,13 +50,23 @@ const myArtworks = [
   'https://images.unsplash.com/photo-1528909514045-2fa4ac7a08ba?ixlib=rb-4.0.3&w=200&h=200&fit=crop'
 ];
 
-const stats = [
-  { label: '创作作品', value: '48', icon: 'fas fa-palette' },
-  { label: '使用时长', value: '128h', icon: 'fas fa-clock' },
-  { label: '获得点赞', value: '1.2k', icon: 'fas fa-heart' }
-];
+
 
 export default function ProfilePage() {
+  const { user, logout, isAuthenticated } = useAuth();
+  const router = useRouter();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  // 如果用户未登录，跳转到登录页面
+  if (!isAuthenticated || !user) {
+    router.push('/auth/login');
+    return null;
+  }
+
+  const handleLogout = () => {
+    logout();
+    router.push('/');
+  };
   return (
     <div className="min-h-screen pb-24">
       <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8">
@@ -65,31 +78,48 @@ export default function ProfilePage() {
               <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg">
                 <Image
                   src="/20250731114736.jpg"
-                  alt="Odyssey Warsaw 用户头像"
+                  alt={`${user.name} 用户头像`}
                   width={96}
                   height={96}
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
-                <i className="fas fa-crown text-white text-sm"></i>
-              </div>
+              {user.isPro && (
+                <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+                  <i className="fas fa-crown text-white text-sm"></i>
+                </div>
+              )}
             </div>
 
             {/* 用户信息 */}
             <div className="flex-1 text-center md:text-left">
-              <h2 className="text-3xl font-bold text-slate-800 mb-2">Odyssey Warsaw</h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-3xl font-bold text-slate-800">{user.name}</h2>
+                <button 
+                  onClick={() => setShowLogoutConfirm(true)}
+                  className="text-slate-500 hover:text-red-500 transition-colors"
+                  title="退出登录"
+                >
+                  <i className="fas fa-sign-out-alt"></i>
+                </button>
+              </div>
               <div className="flex items-center justify-center md:justify-start mb-4">
-                <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-1 rounded-full text-sm font-semibold mr-3">
-                  <i className="fas fa-crown mr-1"></i>
-                  Pro会员
-                </span>
-                <span className="text-slate-500 text-sm">加入于 2025年9月</span>
+                {user.isPro && (
+                  <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-1 rounded-full text-sm font-semibold mr-3">
+                    <i className="fas fa-crown mr-1"></i>
+                    Pro会员
+                  </span>
+                )}
+                <span className="text-slate-500 text-sm">加入于 {user.joinDate}</span>
               </div>
               
               {/* 统计信息 */}
               <div className="grid grid-cols-3 gap-4">
-                {stats.map((stat, index) => (
+                {[
+                  { label: '创作作品', value: user.stats.artworks.toString(), icon: 'fas fa-palette' },
+                  { label: '使用时长', value: user.stats.duration, icon: 'fas fa-clock' },
+                  { label: '获得点赞', value: user.stats.likes.toString(), icon: 'fas fa-heart' }
+                ].map((stat, index) => (
                   <div key={index} className="text-center">
                     <div className="flex items-center justify-center mb-2">
                       <i className={`${stat.icon} text-primary text-lg`}></i>
@@ -170,6 +200,35 @@ export default function ProfilePage() {
           </div>
         </GlassCard>
       </div>
+      
+      {/* 退出登录确认对话框 */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <GlassCard className="max-w-sm w-full">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i className="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">确认退出</h3>
+              <p className="text-slate-600 mb-6">您确定要退出登录吗？</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
+                >
+                  退出
+                </button>
+              </div>
+            </div>
+          </GlassCard>
+        </div>
+      )}
       
       {/* Tab导航 */}
       <TabBar />

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
+import Image from 'next/image';
 import Link from 'next/link';
 
 export default function AudioDetailPage() {

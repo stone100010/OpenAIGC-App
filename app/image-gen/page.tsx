@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
@@ -9,32 +9,23 @@ import Link from 'next/link';
 const styles = [
   { id: 'realistic', name: '写实风格', icon: 'fas fa-camera' },
   { id: 'anime', name: '动漫风格', icon: 'fas fa-palette' },
-  { id: 'artistic', name: '艺术风格', icon: 'fas fa-paint-brush' },
-  { id: 'abstract', name: '抽象风格', icon: 'fas fa-shapes' },
-  { id: 'watercolor', name: '水彩风格', icon: 'fas fa-tint' },
-  { id: 'oil-painting', name: '油画风格', icon: 'fas fa-palette' },
-  { id: 'sketch', name: '素描风格', icon: 'fas fa-pencil-alt' },
-  { id: 'pixel-art', name: '像素艺术', icon: 'fas fa-th' },
-  { id: 'cyberpunk', name: '赛博朋克', icon: 'fas fa-robot' },
-  { id: 'vintage', name: '复古风格', icon: 'fas fa-clock' },
-  { id: 'minimalist', name: '极简主义', icon: 'fas fa-square' },
-  { id: 'surrealist', name: '超现实主义', icon: 'fas fa-eye' }
+  { id: 'artistic', name: '艺术风格', icon: 'fas fa-paint-brush' }
 ];
 
 const qualityOptions = [
-  { id: 'standard', name: '标准质量', description: '快速生成，适合预览' },
-  { id: 'high', name: '高质量', description: '平衡质量与速度' },
-  { id: 'ultra', name: '超高质量', description: '最佳质量，生成时间较长' }
+  { id: 'standard', name: '标清', description: '512像素，快速预览' },
+  { id: 'high', name: '高清', description: '768像素，平衡性能' },
+  { id: 'ultra', name: '超高清', description: '1024像素，专业输出' }
 ];
 
 const sizeOptions = [
-  { id: '1:1', name: '1:1', width: 512, height: 512 },
-  { id: '2:3', name: '2:3', width: 512, height: 768 },
-  { id: '3:2', name: '3:2', width: 768, height: 512 },
-  { id: '3:4', name: '3:4', width: 512, height: 682 },
-  { id: '4:3', name: '4:3', width: 682, height: 512 },
-  { id: '16:9', name: '16:9', width: 768, height: 432 },
-  { id: '9:16', name: '9:16', width: 432, height: 768 }
+  { id: '1:1', name: '1:1' },
+  { id: '2:3', name: '2:3' },
+  { id: '3:2', name: '3:2' },
+  { id: '3:4', name: '3:4' },
+  { id: '4:3', name: '4:3' },
+  { id: '16:9', name: '16:9' },
+  { id: '9:16', name: '9:16' }
 ];
 
 const inspirationGallery = [
@@ -80,6 +71,9 @@ export default function ImageGenPage() {
   const [selectedSize, setSelectedSize] = useState('1:1');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState('');
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const handleRandomPrompt = () => {
     const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
@@ -93,26 +87,225 @@ export default function ImageGenPage() {
     
     setIsGenerating(true);
     setGeneratedImage(null);
+    setError(null);
+    setGenerationProgress('正在构建提示词...');
     
-    // 模拟生成过程
-    setTimeout(() => {
-      // 随机选择一张模拟生成的图片
-      const mockImages = [
-        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&w=800&h=800&fit=crop',
-        'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&w=800&h=800&fit=crop',
-        'https://images.unsplash.com/photo-1541701494587-cb58502866ab?ixlib=rb-4.0.3&w=800&h=800&fit=crop',
-        'https://images.unsplash.com/photo-1536240478700-b869070f9279?ixlib=rb-4.0.3&w=800&h=800&fit=crop',
-        'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&w=800&h=800&fit=crop'
-      ];
-      
-      const randomImage = mockImages[Math.floor(Math.random() * mockImages.length)];
-      setGeneratedImage(randomImage);
+    try {
+      // 构建增强的提示词，结合风格描述
+      const styleDescriptions = {
+        'realistic': 'photorealistic, high quality, detailed',
+        'anime': 'anime style, vibrant colors, clean lines',
+        'artistic': 'artistic style, creative composition',
+        'abstract': 'abstract art, modern style, creative',
+        'watercolor': 'watercolor painting, soft colors',
+        'oil-painting': 'oil painting style, rich textures',
+        'sketch': 'pencil sketch, hand-drawn, detailed',
+        'pixel-art': 'pixel art, retro gaming style',
+        'cyberpunk': 'cyberpunk style, neon lights, futuristic',
+        'vintage': 'vintage style, retro aesthetic',
+        'minimalist': 'minimalist design, clean lines',
+        'surrealist': 'surrealist art, dreamlike imagery'
+      };
+
+      const enhancedPrompt = `${prompt}, ${styleDescriptions[selectedStyle as keyof typeof styleDescriptions] || 'high quality'}`;
+
+      // 根据质量等级设置图像尺寸 - 单边最大512像素
+      // 根据质量等级设置"最大边长"，超高质量支持1024像素
+      const qualityMaxSides = {
+        'standard': 512,   // 最大边长512像素，快速预览
+        'high': 768,       // 最大边长768像素，平衡质量和速度
+        'ultra': 1024      // 最大边长1024像素，专业级输出
+      };
+
+      const maxSide = qualityMaxSides[selectedQuality as keyof typeof qualityMaxSides] || qualityMaxSides.high;
+
+      // 根据宽高比计算实际尺寸，确保长边不超过maxSide
+      const aspectRatios = {
+        '1:1': { ratio: 1.0, width: maxSide, height: maxSide },
+        '2:3': { ratio: 2/3, width: Math.round(maxSide * 2/3), height: maxSide },
+        '3:2': { ratio: 3/2, width: maxSide, height: Math.round(maxSide * 2/3) },
+        '3:4': { ratio: 3/4, width: maxSide, height: Math.round(maxSide * 3/4) },
+        '4:3': { ratio: 4/3, width: Math.round(maxSide * 3/4), height: maxSide },
+        '16:9': { ratio: 16/9, width: maxSide, height: Math.round(maxSide * 9/16) },
+        '9:16': { ratio: 9/16, width: Math.round(maxSide * 9/16), height: maxSide }
+      };
+
+      const finalSize = aspectRatios[selectedSize as keyof typeof aspectRatios] || aspectRatios['1:1'];
+
+      // 构建API URL
+      const encodedPrompt = encodeURIComponent(enhancedPrompt);
+      const apiUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${Math.round(finalSize.width)}&height=${Math.round(finalSize.height)}&model=flux&enhance=true`;
+
+      console.log('生成图像:', { prompt: enhancedPrompt, size: finalSize, apiUrl });
+
+      setGenerationProgress('正在连接AI服务器...');
+
+      // 发送API请求
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'image/jpeg,image/png,image/webp',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      setGenerationProgress('正在生成图像...');
+
+      // 获取图像数据
+      const imageBlob = await response.blob();
+      const imageUrl = URL.createObjectURL(imageBlob);
+
+      setGeneratedImage(imageUrl);
+      setGenerationProgress('图像生成完成！');
+      console.log('图像生成成功:', imageUrl);
+
+    } catch (error) {
+      console.error('图像生成失败:', error);
+      setError(error instanceof Error ? error.message : '生成过程中出现未知错误');
+      setGenerationProgress('');
+    } finally {
       setIsGenerating(false);
-    }, 3000);
+    }
   };
 
   const handleGalleryClick = (item: any) => {
     setPrompt(item.prompt);
+  };
+
+  const handleDownload = async () => {
+    if (!generatedImage) return;
+    
+    try {
+      const response = await fetch(generatedImage);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ai-image-${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('下载失败:', error);
+      alert('下载失败，请重试');
+    }
+  };
+
+  const handleShare = () => {
+    if (navigator.share && generatedImage) {
+      navigator.share({
+        title: 'AI生成的图像',
+        text: '我用iFlow AI生成了这张图像！',
+        url: generatedImage
+      }).catch(console.error);
+    } else if (generatedImage) {
+      // 降级方案：复制到剪贴板
+      navigator.clipboard.writeText(generatedImage).then(() => {
+        alert('图像链接已复制到剪贴板');
+      }).catch(() => {
+        alert('分享功能不可用');
+      });
+    } else {
+      alert('暂无可分享的内容');
+    }
+  };
+
+  const handleFavorite = () => {
+    // TODO: 实现收藏功能
+    alert('收藏功能即将推出！');
+  };
+
+  // 自定义下拉组件
+  const CustomDropdown = ({ 
+    value, 
+    onChange, 
+    options, 
+    placeholder, 
+    icon, 
+    color,
+    dropdownKey 
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    options: { id: string; name: string }[];
+    placeholder: string;
+    icon: string;
+    color: string;
+    dropdownKey: string;
+  }) => {
+    const isOpen = openDropdown === dropdownKey;
+    
+    const selectedOption = options.find(opt => opt.id === value);
+    
+    const handleToggle = () => {
+      setOpenDropdown(isOpen ? null : dropdownKey);
+    };
+    
+    const handleSelect = (optionValue: string) => {
+      onChange(optionValue);
+      setOpenDropdown(null);
+    };
+    
+    // 点击外部关闭
+    useEffect(() => {
+      const handleClickOutside = () => setOpenDropdown(null);
+      if (isOpen) {
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+      }
+    }, [isOpen]);
+    
+    return (
+      <div className="relative" style={{ zIndex: 10000 }}>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggle();
+            }}
+            className={`w-full p-3 bg-gradient-to-r rounded-xl border transition-all appearance-none cursor-pointer text-sm font-medium text-slate-700 shadow-sm hover:shadow-md flex items-center justify-between ${
+              isOpen 
+                ? `from-purple-100 to-pink-200 border-purple-400 ring-2 ring-purple-400/50` 
+                : `from-purple-50 to-pink-50 border-purple-200 hover:from-purple-100 hover:to-pink-100`
+            }`}
+          >
+            <span>{selectedOption?.name || placeholder}</span>
+            <i className={`fas fa-chevron-${isOpen ? 'up' : 'down'} text-purple-400 text-sm transition-transform`}></i>
+          </button>
+          
+          {isOpen && (
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 max-h-60 overflow-y-auto" style={{ zIndex: 10001 }}>
+              {options.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelect(option.id);
+                  }}
+                  className={`w-full text-left px-4 py-3 text-sm transition-colors first:rounded-t-xl last:rounded-b-xl ${
+                    option.id === value
+                      ? (color === 'text-purple-500' ? 'bg-purple-100 text-purple-500 font-medium' :
+                         color === 'text-blue-500' ? 'bg-blue-100 text-blue-500 font-medium' :
+                         color === 'text-green-500' ? 'bg-green-100 text-green-500 font-medium' :
+                         'bg-slate-100 text-slate-500 font-medium')
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {option.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -146,61 +339,46 @@ export default function ImageGenPage() {
                   />
                 </div>
 
-                {/* 生成参数设置 - 手机端紧凑排布 */}
+                {/* 生成参数设置 - 精美的选择器 */}
                 <div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="flex gap-3">
                     {/* 风格选择 */}
-                    <div className="relative">
-                      <select
+                    <div className="flex-[4]">
+                      <CustomDropdown
                         value={selectedStyle}
-                        onChange={(e) => setSelectedStyle(e.target.value)}
-                        className="w-full p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-slate-200/50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all appearance-none cursor-pointer text-sm text-center"
-                      >
-                        {styles.map((style) => (
-                          <option key={style.id} value={style.id}>
-                            {style.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <i className="fas fa-chevron-down text-slate-400 text-xs"></i>
-                      </div>
+                        onChange={setSelectedStyle}
+                        options={styles}
+                        placeholder="选择风格"
+                        icon="fas fa-palette"
+                        color="text-purple-500"
+                        dropdownKey="style"
+                      />
                     </div>
 
                     {/* 质量选择 */}
-                    <div className="relative">
-                      <select
+                    <div className="flex-[3]">
+                      <CustomDropdown
                         value={selectedQuality}
-                        onChange={(e) => setSelectedQuality(e.target.value)}
-                        className="w-full p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-slate-200/50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all appearance-none cursor-pointer text-sm text-center"
-                      >
-                        {qualityOptions.map((quality) => (
-                          <option key={quality.id} value={quality.id}>
-                            {quality.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <i className="fas fa-chevron-down text-slate-400 text-xs"></i>
-                      </div>
+                        onChange={setSelectedQuality}
+                        options={qualityOptions}
+                        placeholder="选择质量"
+                        icon="fas fa-star"
+                        color="text-blue-500"
+                        dropdownKey="quality"
+                      />
                     </div>
 
                     {/* 尺寸选择 */}
-                    <div className="relative">
-                      <select
+                    <div className="flex-[2]">
+                      <CustomDropdown
                         value={selectedSize}
-                        onChange={(e) => setSelectedSize(e.target.value)}
-                        className="w-full p-3 bg-white/70 backdrop-blur-sm rounded-lg border border-slate-200/50 focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all appearance-none cursor-pointer text-sm text-center"
-                      >
-                        {sizeOptions.map((size) => (
-                          <option key={size.id} value={size.id}>
-                            {size.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <i className="fas fa-chevron-down text-slate-400 text-xs"></i>
-                      </div>
+                        onChange={setSelectedSize}
+                        options={sizeOptions}
+                        placeholder="选择尺寸"
+                        icon="fas fa-expand-arrows-alt"
+                        color="text-green-500"
+                        dropdownKey="size"
+                      />
                     </div>
                   </div>
                 </div>
@@ -240,7 +418,7 @@ export default function ImageGenPage() {
             </GlassCard>
 
             {/* 生成结果展示 */}
-            {(generatedImage || isGenerating) && (
+            {(generatedImage || isGenerating || error) && (
               <GlassCard className="hover:shadow-xl transition-shadow duration-300">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-slate-800 mb-4">生成结果</h3>
@@ -249,7 +427,22 @@ export default function ImageGenPage() {
                     <div className="flex flex-col items-center justify-center py-12">
                       <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                       <p className="text-slate-600 mb-2">正在生成中...</p>
-                      <p className="text-sm text-slate-500">请稍候，这可能需要几秒钟</p>
+                      <p className="text-sm text-slate-500 mb-2">{generationProgress}</p>
+                      <p className="text-xs text-slate-400">通常需要10-30秒，请耐心等待</p>
+                    </div>
+                  ) : error ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                        <i className="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+                      </div>
+                      <p className="text-red-600 mb-2">生成失败</p>
+                      <p className="text-sm text-slate-600 mb-4 text-center max-w-md">{error}</p>
+                      <button 
+                        onClick={handleGenerate}
+                        className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                      >
+                        重新尝试
+                      </button>
                     </div>
                   ) : generatedImage ? (
                     <div className="space-y-4">
@@ -294,15 +487,24 @@ export default function ImageGenPage() {
                       
                       {/* 操作按钮 */}
                       <div className="flex gap-3">
-                        <button className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        <button 
+                          onClick={handleDownload}
+                          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                        >
                           <i className="fas fa-download mr-2"></i>
                           下载
                         </button>
-                        <button className="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        <button 
+                          onClick={handleShare}
+                          className="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                        >
                           <i className="fas fa-share mr-2"></i>
                           分享
                         </button>
-                        <button className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        <button 
+                          onClick={handleFavorite}
+                          className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                        >
                           <i className="fas fa-heart mr-2"></i>
                           收藏
                         </button>
