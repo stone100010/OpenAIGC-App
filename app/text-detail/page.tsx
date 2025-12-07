@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
@@ -26,7 +26,7 @@ interface WorkData {
   };
 }
 
-export default function TextDetailPage() {
+function TextDetailContent() {
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [workData, setWorkData] = useState<WorkData | null>(null);
@@ -175,7 +175,7 @@ export default function TextDetailPage() {
 
               {/* 文字内容 */}
               <div className="prose prose-slate max-w-none">
-                {(workData.content_data?.content || '').trim().split('\n\n').map((paragraph, index) => (
+                {(workData.content_data?.content || '').trim().split('\n\n').map((paragraph: string, index: number) => (
                   <p key={index} className="text-slate-700 leading-relaxed mb-6 text-lg">
                     {paragraph.trim()}
                   </p>
@@ -354,5 +354,17 @@ export default function TextDetailPage() {
       {/* Tab导航 */}
       <TabBar />
     </div>
+  );
+}
+
+export default function TextDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-slate-600">加载中...</div>
+      </div>
+    }>
+      <TextDetailContent />
+    </Suspense>
   );
 }

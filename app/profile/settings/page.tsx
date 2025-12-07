@@ -10,7 +10,7 @@ interface UserProfile {
   name: string;
   email: string;
   bio: string;
-  location: string;
+  userLocation: string;
   website: string;
   avatar: string;
 }
@@ -46,7 +46,7 @@ export default function SettingsPage() {
     name: 'Odyssey Warsaw',
     email: 'odysseywarsaw@163.com',
     bio: '热爱AI创作的数字艺术家，专注于探索人工智能与创意的边界。',
-    location: '北京，中国',
+    userLocation: '北京，中国',
     website: 'https://app.openaigc.fun',
     avatar: '/20250731114736.jpg'
   });
@@ -150,8 +150,8 @@ export default function SettingsPage() {
             <label className="block text-sm font-medium text-slate-700 mb-2">所在地</label>
             <input
               type="text"
-              value={profile.location}
-              onChange={(e) => setProfile({...profile, location: e.target.value})}
+              value={profile.userLocation}
+                                onChange={(e) => setProfile({...profile, userLocation: e.target.value})}
               disabled={!isEditing}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-slate-50 disabled:text-slate-500"
             />

@@ -18,6 +18,7 @@ const qualityOptions = [
   { id: 'ultra', name: '超高清', description: '1024像素，专业输出' }
 ];
 
+// 尺寸选择功能已隐藏 - ModelScope API不支持正确尺寸参数
 const sizeOptions = [
   { id: '1:1', name: '1:1' },
   { id: '2:3', name: '2:3' },
@@ -68,7 +69,8 @@ export default function ImageGenPage() {
   const [prompt, setPrompt] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('realistic');
   const [selectedQuality, setSelectedQuality] = useState('high');
-  const [selectedSize, setSelectedSize] = useState('1:1');
+  // 尺寸选择已隐藏 - 固定使用1:1
+  // const [selectedSize, setSelectedSize] = useState('1:1');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,79 +90,145 @@ export default function ImageGenPage() {
     setIsGenerating(true);
     setGeneratedImage(null);
     setError(null);
-    setGenerationProgress('正在构建提示词...');
+    setGenerationProgress('正在创建生成任务...');
     
     try {
       // 构建增强的提示词，结合风格描述
       const styleDescriptions = {
-        'realistic': 'photorealistic, high quality, detailed',
-        'anime': 'anime style, vibrant colors, clean lines',
-        'artistic': 'artistic style, creative composition',
-        'abstract': 'abstract art, modern style, creative',
-        'watercolor': 'watercolor painting, soft colors',
-        'oil-painting': 'oil painting style, rich textures',
-        'sketch': 'pencil sketch, hand-drawn, detailed',
-        'pixel-art': 'pixel art, retro gaming style',
-        'cyberpunk': 'cyberpunk style, neon lights, futuristic',
-        'vintage': 'vintage style, retro aesthetic',
-        'minimalist': 'minimalist design, clean lines',
-        'surrealist': 'surrealist art, dreamlike imagery'
+        'realistic': 'photorealistic, high quality, detailed, realistic photography',
+        'anime': 'anime style, vibrant colors, clean lines, manga illustration',
+        'artistic': 'artistic style, creative composition, fine art painting',
+        'abstract': 'abstract art, modern style, creative, contemporary',
+        'watercolor': 'watercolor painting, soft colors, artistic brushwork',
+        'oil-painting': 'oil painting style, rich textures, classical art',
+        'sketch': 'pencil sketch, hand-drawn, detailed line art',
+        'pixel-art': 'pixel art, retro gaming style, 8-bit graphics',
+        'cyberpunk': 'cyberpunk style, neon lights, futuristic, sci-fi',
+        'vintage': 'vintage style, retro aesthetic, classic design',
+        'minimalist': 'minimalist design, clean lines, simple composition',
+        'surrealist': 'surrealist art, dreamlike imagery, fantasy'
       };
 
       const enhancedPrompt = `${prompt}, ${styleDescriptions[selectedStyle as keyof typeof styleDescriptions] || 'high quality'}`;
 
-      // 根据质量等级设置图像尺寸 - 单边最大512像素
-      // 根据质量等级设置"最大边长"，超高质量支持1024像素
-      const qualityMaxSides = {
-        'standard': 512,   // 最大边长512像素，快速预览
-        'high': 768,       // 最大边长768像素，平衡质量和速度
-        'ultra': 1024      // 最大边长1024像素，专业级输出
+      // 根据质量等级设置参数 - ModelScope Z-Image-Turbo修复
+      // 官方推荐：guidance_scale=0 (Turbo版本不使用CFG引导)
+      const qualityParams = {
+        'standard': { steps: 9, guidance_scale: 0.0 },   // 官方推荐：9步，0引导
+        'high': { steps: 15, guidance_scale: 0.0 },      // 增加步数但保持0引导
+        'ultra': { steps: 25, guidance_scale: 0.0 }      // 超高质量，0引导
       };
 
-      const maxSide = qualityMaxSides[selectedQuality as keyof typeof qualityMaxSides] || qualityMaxSides.high;
+      const qualityConfig = qualityParams[selectedQuality as keyof typeof qualityParams] || qualityParams.high;
 
-      // 根据宽高比计算实际尺寸，确保长边不超过maxSide
+      // 尺寸选择已隐藏 - 固定使用1:1
+      // 根据宽高比计算尺寸 - ModelScope API修复
+      // 官方推荐：默认1024x1024，且guidance_scale应设为0
       const aspectRatios = {
-        '1:1': { ratio: 1.0, width: maxSide, height: maxSide },
-        '2:3': { ratio: 2/3, width: Math.round(maxSide * 2/3), height: maxSide },
-        '3:2': { ratio: 3/2, width: maxSide, height: Math.round(maxSide * 2/3) },
-        '3:4': { ratio: 3/4, width: maxSide, height: Math.round(maxSide * 3/4) },
-        '4:3': { ratio: 4/3, width: Math.round(maxSide * 3/4), height: maxSide },
-        '16:9': { ratio: 16/9, width: maxSide, height: Math.round(maxSide * 9/16) },
-        '9:16': { ratio: 9/16, width: Math.round(maxSide * 9/16), height: maxSide }
+        '1:1': { width: 1024, height: 1024 },  // 官方推荐尺寸
+        // '2:3': { width: 1024, height: 1536 },
+        // '3:2': { width: 1536, height: 1024 },
+        // '3:4': { width: 1024, height: 1365 },
+        // '4:3': { width: 1365, height: 1024 },
+        // '16:9': { width: 1536, height: 864 },
+        // '9:16': { width: 864, height: 1536 }
       };
 
-      const finalSize = aspectRatios[selectedSize as keyof typeof aspectRatios] || aspectRatios['1:1'];
+      // 固定使用1:1尺寸
+      const finalSize = aspectRatios['1:1'];
 
-      // 构建API URL
-      const encodedPrompt = encodeURIComponent(enhancedPrompt);
-      const apiUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${Math.round(finalSize.width)}&height=${Math.round(finalSize.height)}&model=flux&enhance=true`;
+      // const finalSize = aspectRatios[selectedSize as keyof typeof aspectRatios] || aspectRatios['1:1'];
 
-      console.log('生成图像:', { prompt: enhancedPrompt, size: finalSize, apiUrl });
-
-      setGenerationProgress('正在连接AI服务器...');
-
-      // 发送API请求
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'image/jpeg,image/png,image/webp',
-        }
+      console.log('ModelScope生成参数:', { 
+        prompt: enhancedPrompt, 
+        size: finalSize, 
+        quality: qualityConfig,
+        // selectedSize: 'hidden',
+        // aspectRatio: 'hidden',
+        width: finalSize.width,
+        height: finalSize.height,
+        isSquare: finalSize.width === finalSize.height,
+        officialRecommended: finalSize.width === 1024 && finalSize.height === 1024,
+        guidanceOfficial: qualityConfig.guidance_scale === 0.0,
+        note: '尺寸选择已隐藏，固定使用1:1'
       });
 
-      if (!response.ok) {
-        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      setGenerationProgress('正在提交生成任务...');
+
+      // 第一步：创建生成任务
+      const createResponse = await fetch('/api/image-generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: enhancedPrompt,
+          model: 'Tongyi-MAI/Z-Image-Turbo',
+          width: finalSize.width,
+          height: finalSize.height,
+          steps: qualityConfig.steps,
+          guidance_scale: qualityConfig.guidance_scale
+        })
+      });
+
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
+        throw new Error(errorData.message || '创建任务失败');
       }
 
-      setGenerationProgress('正在生成图像...');
+      const createData = await createResponse.json();
+      const taskId = createData.data.task_id;
 
-      // 获取图像数据
-      const imageBlob = await response.blob();
-      const imageUrl = URL.createObjectURL(imageBlob);
+      console.log('任务创建成功:', taskId);
 
-      setGeneratedImage(imageUrl);
-      setGenerationProgress('图像生成完成！');
-      console.log('图像生成成功:', imageUrl);
+      setGenerationProgress('任务已创建，正在等待AI处理...');
+
+      // 第二步：轮询任务状态
+      let attempts = 0;
+      const maxAttempts = 60; // 最多等待5分钟
+
+      const pollTask = async () => {
+        attempts++;
+        
+        try {
+          const statusResponse = await fetch(`/api/image-generate?task_id=${taskId}`);
+          
+          if (!statusResponse.ok) {
+            throw new Error('查询任务状态失败');
+          }
+
+          const statusData = await statusResponse.json();
+
+          if (statusData.data.status === 'completed') {
+            setGeneratedImage(statusData.data.image_url);
+            setGenerationProgress('图像生成完成！');
+            console.log('图像生成成功:', statusData.data.image_url);
+            return true;
+            
+          } else if (statusData.data.status === 'failed') {
+            throw new Error(statusData.data.error || '图像生成失败');
+            
+          } else {
+            setGenerationProgress(`AI正在生成中... (${attempts}/${maxAttempts})`);
+            return false;
+          }
+          
+        } catch (error) {
+          console.error('轮询任务状态失败:', error);
+          throw error;
+        }
+      };
+
+      // 开始轮询
+      let completed = false;
+      while (!completed && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 5000)); // 等待5秒
+        completed = await pollTask();
+      }
+
+      if (attempts >= maxAttempts) {
+        throw new Error('生成超时，请稍后重试');
+      }
 
     } catch (error) {
       console.error('图像生成失败:', error);
@@ -343,7 +411,7 @@ export default function ImageGenPage() {
                 <div>
                   <div className="flex gap-3">
                     {/* 风格选择 */}
-                    <div className="flex-[4]">
+                    <div className="flex-[5]">
                       <CustomDropdown
                         value={selectedStyle}
                         onChange={setSelectedStyle}
@@ -368,8 +436,8 @@ export default function ImageGenPage() {
                       />
                     </div>
 
-                    {/* 尺寸选择 */}
-                    <div className="flex-[2]">
+                    {/* 尺寸选择已隐藏 - ModelScope API不支持正确尺寸参数 */}
+                    {/* <div className="flex-[2]">
                       <CustomDropdown
                         value={selectedSize}
                         onChange={setSelectedSize}
@@ -379,7 +447,7 @@ export default function ImageGenPage() {
                         color="text-green-500"
                         dropdownKey="size"
                       />
-                    </div>
+                    </div> */}
                   </div>
                 </div>
 
@@ -472,16 +540,15 @@ export default function ImageGenPage() {
                           </div>
                           <div>
                             <span className="text-slate-600">风格:</span>
-                            <span className="ml-2 font-medium text-slate-800">{styles.find(s => s.id === selectedStyle)?.name}</span>
-                          </div>
-                          <div>
+                            <span className="ml-2 font-medium text-slate-800 block">{styles.find(s => s.id === selectedStyle)?.name}</span>
                             <span className="text-slate-600">质量:</span>
                             <span className="ml-2 font-medium text-slate-800">{qualityOptions.find(q => q.id === selectedQuality)?.name}</span>
                           </div>
-                          <div>
+                          {/* 尺寸信息已隐藏 */}
+                          {/* <div>
                             <span className="text-slate-600">尺寸:</span>
-                            <span className="ml-2 font-medium text-slate-800">{selectedSize}</span>
-                          </div>
+                            <span className="ml-2 font-medium text-slate-800">1:1 (固定)</span>
+                          </div> */}
                         </div>
                       </div>
                       

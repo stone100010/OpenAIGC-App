@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
@@ -27,7 +27,7 @@ interface WorkData {
   };
 }
 
-export default function ImageDetailPage() {
+function ImageDetailContent() {
   const [isLiked, setIsLiked] = useState(false);
   const [workData, setWorkData] = useState<WorkData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -309,5 +309,17 @@ export default function ImageDetailPage() {
       {/* Tab导航 */}
       <TabBar />
     </div>
+  );
+}
+
+export default function ImageDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-slate-600">加载中...</div>
+      </div>
+    }>
+      <ImageDetailContent />
+    </Suspense>
   );
 }
