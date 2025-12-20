@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         '王五准备下周的工作汇报',
         '赵六整理会议文档并发送给所有参会人员'
       ],
-      participants: participants ? participants.split(',').map(p => p.trim()) : [],
+      participants: participants ? participants.split(',').map((p: string) => p.trim()) : [],
       duration: duration || '45:30',
       date: date || new Date().toISOString().split('T')[0]
     };
