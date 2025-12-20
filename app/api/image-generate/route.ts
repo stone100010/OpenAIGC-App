@@ -9,13 +9,15 @@ const COMMON_HEADERS = {
   "Content-Type": "application/json",
 };
 
+// 用于存储taskId和prompt的映射（临时解决方案）
+const taskPromptMap = new Map<string, string>();
+
 // 类型定义
 interface GenerateRequest {
   prompt: string;
   model?: string;
   loras?: string | Record<string, number>;
-  width?: number;
-  height?: number;
+  size?: string;        // ModelScope使用size字符串格式，如"1024x1024"
   steps?: number;
   guidance_scale?: number;
   seed?: number;
@@ -44,8 +46,7 @@ export async function POST(request: NextRequest) {
       prompt, 
       model = "Tongyi-MAI/Z-Image-Turbo", 
       loras, 
-      width = 1024,        // 官方推荐尺寸
-      height = 1024,       // 官方推荐尺寸
+      size = "1024x1024",  // ModelScope API使用size字符串格式
       steps = 9,           // 官方推荐步数
       guidance_scale = 0.0, // 官方推荐：Turbo版本不使用CFG引导
       seed 
@@ -62,8 +63,7 @@ export async function POST(request: NextRequest) {
     const requestData: any = {
       model,
       prompt: prompt,
-      width,
-      height,
+      size,  // 使用size字符串格式，如"1024x1024"
       steps,
       guidance_scale
     };
@@ -81,11 +81,10 @@ export async function POST(request: NextRequest) {
     console.log('ModelScope API请求:', { 
       model, 
       prompt: prompt.substring(0, 50) + '...', 
-      width, 
-      height,
-      aspect_ratio: width === height ? '1:1 (square)' : `${width}:${height}`,
+      size,
       hasLoRA: !!loras,
-      full_params: { prompt, model, width, height, steps, guidance_scale }
+      hasSeed: seed !== undefined,
+      full_params: { prompt, model, size, steps, guidance_scale, seed }
     });
 
     // 创建生成任务
@@ -101,13 +100,30 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('ModelScope API错误:', response.status, errorText);
-      throw new Error(`ModelScope API请求失败: ${response.status} ${response.statusText}`);
+      
+      // 为不同错误状态码提供更明确的错误信息
+      let errorMessage = `ModelScope API请求失败: ${response.status} ${response.statusText}`;
+      
+      if (response.status === 401) {
+        errorMessage = '401 Unauthorized - ModelScope API密钥已过期或无效，请联系管理员更新API密钥';
+      } else if (response.status === 403) {
+        errorMessage = '403 Forbidden - 没有权限访问ModelScope API，请检查API密钥权限';
+      } else if (response.status === 429) {
+        errorMessage = '429 Too Many Requests - API调用频率超限，请稍后重试';
+      } else if (response.status >= 500) {
+        errorMessage = `500+ Server Error - ModelScope服务器错误: ${response.status}，请稍后重试`;
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
     const taskId = data.task_id;
 
     console.log('任务创建成功:', { taskId, status: data.task_status });
+
+    // 存储taskId和prompt的映射，供后续保存到数据库使用
+    taskPromptMap.set(taskId, prompt);
 
     return NextResponse.json({
       success: true,
@@ -168,7 +184,21 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('查询任务状态失败:', response.status, errorText);
-      throw new Error(`查询任务状态失败: ${response.status} ${response.statusText}`);
+      
+      // 为不同错误状态码提供更明确的错误信息
+      let errorMessage = `查询任务状态失败: ${response.status} ${response.statusText}`;
+      
+      if (response.status === 401) {
+        errorMessage = '401 Unauthorized - ModelScope API密钥已过期或无效，请联系管理员更新API密钥';
+      } else if (response.status === 403) {
+        errorMessage = '403 Forbidden - 没有权限查询任务状态，请检查API密钥权限';
+      } else if (response.status === 429) {
+        errorMessage = '429 Too Many Requests - API调用频率超限，请稍后重试';
+      } else if (response.status >= 500) {
+        errorMessage = `500+ Server Error - ModelScope服务器错误: ${response.status}，请稍后重试`;
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data: TaskResponse = await response.json();
@@ -184,10 +214,15 @@ export async function GET(request: NextRequest) {
     if (data.task_status === "SUCCEED" && data.output_images && data.output_images.length > 0) {
       // 任务成功，返回生成的图像
       const imageUrl = data.output_images[0];
-      
+
+      // 从映射中获取原始prompt
+      const originalPrompt = taskPromptMap.get(taskId) || 'AI Generated Image';
+
       // 保存到数据库（可选）
       try {
-        await saveToDatabase(taskId, imageUrl, 'ModelScope Generated');
+        await saveToDatabase(taskId, imageUrl, originalPrompt);
+        // 保存成功后删除映射，避免内存泄漏
+        taskPromptMap.delete(taskId);
       } catch (dbError) {
         console.warn('保存到数据库失败:', dbError);
         // 不影响主流程，继续返回结果
@@ -264,18 +299,30 @@ async function saveToDatabase(taskId: string, imageUrl: string, description: str
   try {
     await client.connect();
 
-    // 获取管理员用户ID
+    // 获取管理员用户ID（作为默认创建者）
     const adminResult = await client.query(
       'SELECT id FROM users WHERE username = $1',
-      ['odyssey']
+      ['Odyssey Warsaw']
     );
 
-    if (adminResult.rows.length === 0) {
-      console.warn('管理员用户不存在，跳过数据库保存');
-      return;
+    let creatorId;
+    if (adminResult.rows.length > 0) {
+      creatorId = adminResult.rows[0].id;
+      console.log('使用管理员账户保存图像');
+    } else {
+      // 如果没有管理员用户，使用数据库中的第一个用户
+      const firstUserResult = await client.query(
+        'SELECT id FROM users ORDER BY created_at ASC LIMIT 1'
+      );
+      
+      if (firstUserResult.rows.length === 0) {
+        console.warn('数据库中没有用户，跳过保存');
+        return;
+      }
+      
+      creatorId = firstUserResult.rows[0].id;
+      console.log('使用第一个用户账户保存图像');
     }
-
-    const creatorId = adminResult.rows[0].id;
 
     // 创建创作作品记录
     const insertQuery = `

@@ -1,32 +1,39 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import { ProtectedRoute } from '@/components/auth';
 
 const styles = [
   { id: 'realistic', name: '写实风格', icon: 'fas fa-camera' },
   { id: 'anime', name: '动漫风格', icon: 'fas fa-palette' },
-  { id: 'artistic', name: '艺术风格', icon: 'fas fa-paint-brush' }
+  { id: 'artistic', name: '艺术风格', icon: 'fas fa-paint-brush' },
+  { id: 'watercolor', name: '水彩风格', icon: 'fas fa-tint' },
+  { id: 'oil_painting', name: '油画风格', icon: 'fas fa-paint-roller' },
+  { id: 'digital_art', name: '数字艺术', icon: 'fas fa-desktop' },
+  { id: 'pencil_sketch', name: '铅笔素描', icon: 'fas fa-pencil-alt' },
+  { id: 'comic', name: '漫画风格', icon: 'fas fa-book' },
+  { id: 'minimalist', name: '极简风格', icon: 'fas fa-square' },
+  { id: 'vintage', name: '复古风格', icon: 'fas fa-clock' }
 ];
 
 const qualityOptions = [
-  { id: 'standard', name: '标清', description: '512像素，快速预览' },
-  { id: 'high', name: '高清', description: '768像素，平衡性能' },
-  { id: 'ultra', name: '超高清', description: '1024像素，专业输出' }
+  { id: 'standard', name: '标准' },
+  { id: 'high', name: '高级' },
+  { id: 'ultra', name: '大师级' }
 ];
 
-// 尺寸选择功能已隐藏 - ModelScope API不支持正确尺寸参数
 const sizeOptions = [
   { id: '1:1', name: '1:1' },
-  { id: '2:3', name: '2:3' },
-  { id: '3:2', name: '3:2' },
-  { id: '3:4', name: '3:4' },
-  { id: '4:3', name: '4:3' },
+  { id: '9:16', name: '9:16' },
   { id: '16:9', name: '16:9' },
-  { id: '9:16', name: '9:16' }
+  { id: '4:3', name: '4:3' },
+  { id: '3:4', name: '3:4' }
 ];
 
 const inspirationGallery = [
@@ -65,17 +72,27 @@ const prompts = [
   '春日花园的温暖阳光，花朵盛开'
 ];
 
-export default function ImageGenPage() {
+function ImageGenContent() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('realistic');
   const [selectedQuality, setSelectedQuality] = useState('high');
-  // 尺寸选择已隐藏 - 固定使用1:1
-  // const [selectedSize, setSelectedSize] = useState('1:1');
+  const [selectedSize, setSelectedSize] = useState('1:1');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState('');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  // 尺寸映射表 - ModelScope API使用size字符串格式
+  const sizeMap: Record<string, string> = {
+    '1:1': '1024x1024',     // 正方形
+    '9:16': '864x1536',     // 竖版（手机壁纸）
+    '16:9': '1536x864',     // 横版（桌面壁纸）
+    '4:3': '1024x768',      // 横版经典
+    '3:4': '768x1024'       // 竖版经典
+  };
 
   const handleRandomPrompt = () => {
     const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
@@ -86,7 +103,14 @@ export default function ImageGenPage() {
     if (!prompt.trim()) {
       return;
     }
-    
+
+    // 检查用户是否已登录
+    if (!isAuthenticated) {
+      alert('请先登录后再使用AI绘图功能');
+      router.push('/auth/login');
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedImage(null);
     setError(null);
@@ -111,6 +135,8 @@ export default function ImageGenPage() {
 
       const enhancedPrompt = `${prompt}, ${styleDescriptions[selectedStyle as keyof typeof styleDescriptions] || 'high quality'}`;
 
+      const finalSize = sizeMap[selectedSize as keyof typeof sizeMap] || sizeMap['1:1'];
+
       // 根据质量等级设置参数 - ModelScope Z-Image-Turbo修复
       // 官方推荐：guidance_scale=0 (Turbo版本不使用CFG引导)
       const qualityParams = {
@@ -121,36 +147,18 @@ export default function ImageGenPage() {
 
       const qualityConfig = qualityParams[selectedQuality as keyof typeof qualityParams] || qualityParams.high;
 
-      // 尺寸选择已隐藏 - 固定使用1:1
-      // 根据宽高比计算尺寸 - ModelScope API修复
-      // 官方推荐：默认1024x1024，且guidance_scale应设为0
-      const aspectRatios = {
-        '1:1': { width: 1024, height: 1024 },  // 官方推荐尺寸
-        // '2:3': { width: 1024, height: 1536 },
-        // '3:2': { width: 1536, height: 1024 },
-        // '3:4': { width: 1024, height: 1365 },
-        // '4:3': { width: 1365, height: 1024 },
-        // '16:9': { width: 1536, height: 864 },
-        // '9:16': { width: 864, height: 1536 }
-      };
-
-      // 固定使用1:1尺寸
-      const finalSize = aspectRatios['1:1'];
-
-      // const finalSize = aspectRatios[selectedSize as keyof typeof aspectRatios] || aspectRatios['1:1'];
+      // 自动生成随机种子
+      const seed = Math.floor(Math.random() * 1000000);
 
       console.log('ModelScope生成参数:', { 
         prompt: enhancedPrompt, 
         size: finalSize, 
         quality: qualityConfig,
-        // selectedSize: 'hidden',
-        // aspectRatio: 'hidden',
-        width: finalSize.width,
-        height: finalSize.height,
-        isSquare: finalSize.width === finalSize.height,
-        officialRecommended: finalSize.width === 1024 && finalSize.height === 1024,
+        selectedSize,
+        aspectRatio: selectedSize,
+        autoSeed: seed,
         guidanceOfficial: qualityConfig.guidance_scale === 0.0,
-        note: '尺寸选择已隐藏，固定使用1:1'
+        note: '尺寸选择已启用，自动随机种子'
       });
 
       setGenerationProgress('正在提交生成任务...');
@@ -164,10 +172,10 @@ export default function ImageGenPage() {
         body: JSON.stringify({
           prompt: enhancedPrompt,
           model: 'Tongyi-MAI/Z-Image-Turbo',
-          width: finalSize.width,
-          height: finalSize.height,
+          size: finalSize,
           steps: qualityConfig.steps,
-          guidance_scale: qualityConfig.guidance_scale
+          guidance_scale: qualityConfig.guidance_scale,
+          seed: seed // 始终传递随机种子
         })
       });
 
@@ -189,30 +197,39 @@ export default function ImageGenPage() {
 
       const pollTask = async () => {
         attempts++;
-        
+
         try {
           const statusResponse = await fetch(`/api/image-generate?task_id=${taskId}`);
-          
+
           if (!statusResponse.ok) {
             throw new Error('查询任务状态失败');
           }
 
           const statusData = await statusResponse.json();
 
+          console.log('轮询响应:', {
+            attempt: attempts,
+            success: statusData.success,
+            status: statusData.data?.status,
+            hasImageUrl: !!statusData.data?.image_url,
+            imageUrl: statusData.data?.image_url,
+            fullData: statusData
+          });
+
           if (statusData.data.status === 'completed') {
             setGeneratedImage(statusData.data.image_url);
             setGenerationProgress('图像生成完成！');
             console.log('图像生成成功:', statusData.data.image_url);
             return true;
-            
+
           } else if (statusData.data.status === 'failed') {
             throw new Error(statusData.data.error || '图像生成失败');
-            
+
           } else {
             setGenerationProgress(`AI正在生成中... (${attempts}/${maxAttempts})`);
             return false;
           }
-          
+
         } catch (error) {
           console.error('轮询任务状态失败:', error);
           throw error;
@@ -222,8 +239,10 @@ export default function ImageGenPage() {
       // 开始轮询
       let completed = false;
       while (!completed && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // 等待5秒
         completed = await pollTask();
+        if (!completed && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 5000)); // 等待5秒后再次轮询
+        }
       }
 
       if (attempts >= maxAttempts) {
@@ -232,7 +251,44 @@ export default function ImageGenPage() {
 
     } catch (error) {
       console.error('图像生成失败:', error);
-      setError(error instanceof Error ? error.message : '生成过程中出现未知错误');
+      
+      // 改进错误提示，提供用户友好的错误信息
+      let userMessage = '生成过程中出现未知错误';
+      
+      if (error instanceof Error) {
+        const errorMsg = error.message;
+        
+        // API密钥相关错误
+        if (errorMsg.includes('401') || errorMsg.includes('Authentication failed') || errorMsg.includes('Unauthorized')) {
+          userMessage = '🔑 API密钥已过期或无效，请联系管理员更新ModelScope API密钥';
+        }
+        // 网络错误
+        else if (errorMsg.includes('fetch') || errorMsg.includes('网络') || errorMsg.includes('network')) {
+          userMessage = '🌐 网络连接失败，请检查网络连接后重试';
+        }
+        // 超时错误
+        else if (errorMsg.includes('超时') || errorMsg.includes('timeout')) {
+          userMessage = '⏱️ 生成超时，服务器响应过慢，请稍后重试';
+        }
+        // 服务器错误
+        else if (errorMsg.includes('500') || errorMsg.includes('服务器')) {
+          userMessage = '🚫 服务器内部错误，请稍后重试或联系管理员';
+        }
+        // 任务创建失败
+        else if (errorMsg.includes('创建任务失败')) {
+          userMessage = '❌ 无法创建生成任务，请检查输入内容并重试';
+        }
+        // 查询任务失败
+        else if (errorMsg.includes('查询任务状态失败')) {
+          userMessage = '🔍 无法查询任务状态，请检查网络连接后重试';
+        }
+        // 其他错误
+        else {
+          userMessage = `❌ ${errorMsg}`;
+        }
+      }
+      
+      setError(userMessage);
       setGenerationProgress('');
     } finally {
       setIsGenerating(false);
@@ -288,6 +344,49 @@ export default function ImageGenPage() {
     alert('收藏功能即将推出！');
   };
 
+  // 错误类型识别函数
+  const isApiKeyError = (errorMsg: string) => {
+    return errorMsg.includes('401') || 
+           errorMsg.includes('Unauthorized') || 
+           errorMsg.includes('API密钥') ||
+           errorMsg.includes('Authentication failed') ||
+           errorMsg.includes('ModelScope token');
+  };
+
+  const isNetworkError = (errorMsg: string) => {
+    return errorMsg.includes('fetch') || 
+           errorMsg.includes('网络') || 
+           errorMsg.includes('network') ||
+           errorMsg.includes('ECONNREFUSED') ||
+           errorMsg.includes('timeout');
+  };
+
+  const isTimeoutError = (errorMsg: string) => {
+    return errorMsg.includes('超时') || 
+           errorMsg.includes('timeout') ||
+           errorMsg.includes('生成超时');
+  };
+
+  const isServerError = (errorMsg: string) => {
+    return errorMsg.includes('500') || 
+           errorMsg.includes('服务器') ||
+           errorMsg.includes('Server Error');
+  };
+
+  const isCreateTaskError = (errorMsg: string) => {
+    return errorMsg.includes('创建任务失败') ||
+           errorMsg.includes('查询任务状态失败');
+  };
+
+  const getErrorType = (errorMsg: string) => {
+    if (isApiKeyError(errorMsg)) return 'API密钥问题';
+    if (isNetworkError(errorMsg)) return '网络连接问题';
+    if (isTimeoutError(errorMsg)) return '生成超时';
+    if (isServerError(errorMsg)) return '服务器错误';
+    if (isCreateTaskError(errorMsg)) return '任务处理错误';
+    return '生成失败';
+  };
+
   // 自定义下拉组件
   const CustomDropdown = ({ 
     value, 
@@ -300,7 +399,7 @@ export default function ImageGenPage() {
   }: {
     value: string;
     onChange: (value: string) => void;
-    options: { id: string; name: string }[];
+    options: { id: string; name: string; description?: string }[];
     placeholder: string;
     icon: string;
     color: string;
@@ -348,27 +447,33 @@ export default function ImageGenPage() {
           </button>
           
           {isOpen && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 max-h-60 overflow-y-auto" style={{ zIndex: 10001 }}>
-              {options.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelect(option.id);
-                  }}
-                  className={`w-full text-left px-4 py-3 text-sm transition-colors first:rounded-t-xl last:rounded-b-xl ${
-                    option.id === value
-                      ? (color === 'text-purple-500' ? 'bg-purple-100 text-purple-500 font-medium' :
-                         color === 'text-blue-500' ? 'bg-blue-100 text-blue-500 font-medium' :
-                         color === 'text-green-500' ? 'bg-green-100 text-green-500 font-medium' :
-                         'bg-slate-100 text-slate-500 font-medium')
-                      : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  {option.name}
-                </button>
-              ))}
+            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200" style={{ zIndex: 10001 }}>
+              {/* 上下拨盘滚动容器 */}
+              <div className="max-h-36 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+                {options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelect(option.id);
+                    }}
+                    className={`w-full text-left px-4 py-3 text-sm transition-colors hover:bg-slate-50 ${
+                      option.id === value
+                        ? (color === 'text-purple-500' ? 'bg-purple-100 text-purple-500 font-medium' :
+                           color === 'text-blue-500' ? 'bg-blue-100 text-blue-500 font-medium' :
+                           color === 'text-green-500' ? 'bg-green-100 text-green-500 font-medium' :
+                           'bg-slate-100 text-slate-500 font-medium')
+                        : 'text-slate-700'
+                    }`}
+                  >
+                    <div className="font-medium">{option.name}</div>
+                    {option.description && (
+                      <div className="text-xs text-slate-500 mt-1">{option.description}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -411,7 +516,7 @@ export default function ImageGenPage() {
                 <div>
                   <div className="flex gap-3">
                     {/* 风格选择 */}
-                    <div className="flex-[5]">
+                    <div className="flex-[4]">
                       <CustomDropdown
                         value={selectedStyle}
                         onChange={setSelectedStyle}
@@ -436,8 +541,8 @@ export default function ImageGenPage() {
                       />
                     </div>
 
-                    {/* 尺寸选择已隐藏 - ModelScope API不支持正确尺寸参数 */}
-                    {/* <div className="flex-[2]">
+                    {/* 尺寸选择器 */}
+                    <div className="flex-[2]">
                       <CustomDropdown
                         value={selectedSize}
                         onChange={setSelectedSize}
@@ -447,7 +552,7 @@ export default function ImageGenPage() {
                         color="text-green-500"
                         dropdownKey="size"
                       />
-                    </div> */}
+                    </div>
                   </div>
                 </div>
 
@@ -500,17 +605,47 @@ export default function ImageGenPage() {
                     </div>
                   ) : error ? (
                     <div className="flex flex-col items-center justify-center py-12">
+                      {/* 根据错误类型显示不同的图标 */}
                       <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                        <i className="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+                        <i className={`text-2xl ${
+                          isApiKeyError(error) ? 'fas fa-key text-red-500' :
+                          isNetworkError(error) ? 'fas fa-wifi text-red-500' :
+                          isTimeoutError(error) ? 'fas fa-clock text-red-500' :
+                          isServerError(error) ? 'fas fa-server text-red-500' :
+                          isCreateTaskError(error) ? 'fas fa-times-circle text-red-500' :
+                          'fas fa-exclamation-triangle text-red-500'
+                        }`}></i>
                       </div>
-                      <p className="text-red-600 mb-2">生成失败</p>
-                      <p className="text-sm text-slate-600 mb-4 text-center max-w-md">{error}</p>
-                      <button 
-                        onClick={handleGenerate}
-                        className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                      >
-                        重新尝试
-                      </button>
+                      
+                      <p className="text-red-600 mb-2 font-semibold">
+                        {getErrorType(error)}
+                      </p>
+                      
+                      {/* 使用pre-wrap保留错误信息中的换行和特殊字符 */}
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 max-w-lg">
+                        <pre className="text-sm text-red-700 whitespace-pre-wrap font-mono leading-relaxed text-center">
+                          {error}
+                        </pre>
+                      </div>
+                      
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={handleGenerate}
+                          className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                        >
+                          重新尝试
+                        </button>
+                        
+                        {/* 如果是API密钥问题，显示联系管理员按钮 */}
+                        {isApiKeyError(error) && (
+                          <button 
+                            onClick={() => alert('请联系系统管理员更新ModelScope API密钥')}
+                            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                          >
+                            联系管理员
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : generatedImage ? (
                     <div className="space-y-4">
@@ -532,23 +667,30 @@ export default function ImageGenPage() {
                       
                       {/* 图像信息 */}
                       <div className="bg-slate-50 rounded-lg p-4">
-                        <h4 className="font-medium text-slate-800 mb-2">生成参数</h4>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                        <h4 className="font-medium text-slate-800 mb-3">生成参数</h4>
+                        <div className="space-y-2 text-sm">
+                          {/* 描述词 - 单独一行 */}
                           <div>
                             <span className="text-slate-600">描述:</span>
                             <span className="ml-2 font-medium text-slate-800">{prompt}</span>
                           </div>
-                          <div>
-                            <span className="text-slate-600">风格:</span>
-                            <span className="ml-2 font-medium text-slate-800 block">{styles.find(s => s.id === selectedStyle)?.name}</span>
-                            <span className="text-slate-600">质量:</span>
-                            <span className="ml-2 font-medium text-slate-800">{qualityOptions.find(q => q.id === selectedQuality)?.name}</span>
+                          {/* 风格和质量 - 各占一半 */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <span className="text-slate-600">风格:</span>
+                              <span className="ml-2 font-medium text-slate-800">{styles.find(s => s.id === selectedStyle)?.name}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-600">质量:</span>
+                              <span className="ml-2 font-medium text-slate-800">{qualityOptions.find(q => q.id === selectedQuality)?.name}</span>
+                            </div>
                           </div>
-                          {/* 尺寸信息已隐藏 */}
-                          {/* <div>
+                          <div>
                             <span className="text-slate-600">尺寸:</span>
-                            <span className="ml-2 font-medium text-slate-800">1:1 (固定)</span>
-                          </div> */}
+                            <span className="ml-2 font-medium text-slate-800">
+                              {selectedSize} ({sizeMap[selectedSize as keyof typeof sizeMap]})
+                            </span>
+                          </div>
                         </div>
                       </div>
                       
@@ -687,5 +829,13 @@ export default function ImageGenPage() {
       {/* Tab导航 */}
       <TabBar />
     </div>
+  );
+}
+
+export default function ImageGenPage() {
+  return (
+    <ProtectedRoute>
+      <ImageGenContent />
+    </ProtectedRoute>
   );
 }

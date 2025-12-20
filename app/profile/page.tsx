@@ -1,12 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import { ProtectedRoute } from '@/components/auth';
+import { useAuthorWorks } from '@/hooks/useAuthorWorks';
+
+// 用户档案数据类型
+interface UserProfile {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  bio: string;
+  avatar: string;
+  location: string;
+  website: string;
+  isPro: boolean;
+  joinDate: string;
+}
 
 const menuItems = [
   { 
@@ -41,32 +57,122 @@ const menuItems = [
   }
 ];
 
-const myArtworks = [
-  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1541701494587-cb58502866ab?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1541961017774-22349e4a1262?ixlib=rb-4.0.3&w=200&h=200&fit=crop',
-  'https://images.unsplash.com/photo-1528909514045-2fa4ac7a08ba?ixlib=rb-4.0.3&w=200&h=200&fit=crop'
-];
+// 获取真实作品数据的Hook
 
 
 
-export default function ProfilePage() {
-  const { user, logout, isAuthenticated } = useAuth();
+function ProfileContent() {
+  const { user, logout } = useAuth();
   const router = useRouter();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [profileData, setProfileData] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 如果用户未登录，跳转到登录页面
-  if (!isAuthenticated || !user) {
-    router.push('/auth/login');
-    return null;
-  }
+  // 获取用户的真实作品
+  const { works: userWorks, loading: worksLoading } = useAuthorWorks(user?.id || null);
+
+  // 获取认证头信息
+  const getAuthHeaders = () => {
+    return {
+      'Content-Type': 'application/json',
+      'x-user-id': user?.id || ''
+    };
+  };
+
+  // 加载用户档案数据
+  const loadProfileData = async () => {
+    try {
+      setIsLoading(true);
+      
+      const response = await fetch('/api/user/profile', {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setProfileData(data.data);
+      } else {
+        console.error('获取用户档案失败:', data.message);
+        // 如果API失败，使用AuthContext中的数据作为备选
+        if (user) {
+          setProfileData({
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            bio: '',
+            avatar: '/20250731114736.jpg',
+            location: '',
+            website: '',
+            isPro: user.isPro,
+            joinDate: user.joinDate
+          });
+        }
+      }
+    } catch (error) {
+      console.error('加载用户档案失败:', error);
+      // 如果API失败，使用AuthContext中的数据作为备选
+      if (user) {
+        setProfileData({
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          bio: '',
+          avatar: '/20250731114736.jpg',
+          location: '',
+          website: '',
+          isPro: user.isPro,
+          joinDate: user.joinDate
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 组件加载时获取数据
+  useEffect(() => {
+    loadProfileData();
+  }, [user]);
 
   const handleLogout = () => {
     logout();
     router.push('/');
   };
+
+  // 加载状态
+  if (isLoading) {
+    return (
+      <div className="min-h-screen pb-24 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">加载用户信息中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 如果没有档案数据，显示错误信息
+  if (!profileData) {
+    return (
+      <div className="min-h-screen pb-24 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">😕</div>
+          <h3 className="text-xl font-semibold text-slate-700 mb-2">加载失败</h3>
+          <p className="text-slate-500 mb-4">无法获取用户信息</p>
+          <button
+            onClick={loadProfileData}
+            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen pb-24">
       <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8">
@@ -77,14 +183,14 @@ export default function ProfilePage() {
             <div className="relative">
               <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg">
                 <Image
-                  src="/20250731114736.jpg"
-                  alt={`${user.name} 用户头像`}
+                  src={profileData.avatar}
+                  alt={`${profileData.name} 用户头像`}
                   width={96}
                   height={96}
                   className="w-full h-full object-cover"
                 />
               </div>
-              {user.isPro && (
+              {profileData.isPro && (
                 <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
                   <i className="fas fa-crown text-white text-sm"></i>
                 </div>
@@ -93,41 +199,83 @@ export default function ProfilePage() {
 
             {/* 用户信息 */}
             <div className="flex-1 text-center md:text-left">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-3xl font-bold text-slate-800">{user.name}</h2>
-                <button 
-                  onClick={() => setShowLogoutConfirm(true)}
-                  className="text-slate-500 hover:text-red-500 transition-colors"
-                  title="退出登录"
-                >
-                  <i className="fas fa-sign-out-alt"></i>
-                </button>
-              </div>
+              <h2 className="text-3xl font-bold text-slate-800 mb-2">{profileData.name}</h2>
               <div className="flex items-center justify-center md:justify-start mb-4">
-                {user.isPro && (
+                {profileData.isPro && (
                   <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-1 rounded-full text-sm font-semibold mr-3">
                     <i className="fas fa-crown mr-1"></i>
                     Pro会员
                   </span>
                 )}
-                <span className="text-slate-500 text-sm">加入于 {user.joinDate}</span>
+                <span className="text-slate-500 text-sm">加入于 {new Date(profileData.joinDate).toLocaleDateString('zh-CN')}</span>
+              </div>
+              
+              {/* 用户简介 */}
+              {profileData.bio && (
+                <p className="text-slate-600 text-sm mb-4 max-w-md">
+                  {profileData.bio}
+                </p>
+              )}
+              
+              {/* 位置和网站信息 */}
+              <div className="space-y-2 mb-4">
+                {profileData.location && (
+                  <div className="flex items-center text-sm text-slate-600">
+                    <i className="fas fa-map-marker-alt mr-2 text-slate-400"></i>
+                    <span>{profileData.location}</span>
+                  </div>
+                )}
+                {profileData.website && (
+                  <div className="flex items-center text-sm text-slate-600">
+                    <i className="fas fa-globe mr-2 text-slate-400"></i>
+                    <a 
+                      href={profileData.website} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="hover:text-blue-600 transition-colors"
+                    >
+                      {profileData.website}
+                    </a>
+                  </div>
+                )}
               </div>
               
               {/* 统计信息 */}
               <div className="grid grid-cols-3 gap-4">
-                {[
-                  { label: '创作作品', value: user.stats.artworks.toString(), icon: 'fas fa-palette' },
-                  { label: '使用时长', value: user.stats.duration, icon: 'fas fa-clock' },
-                  { label: '获得点赞', value: user.stats.likes.toString(), icon: 'fas fa-heart' }
-                ].map((stat, index) => (
-                  <div key={index} className="text-center">
-                    <div className="flex items-center justify-center mb-2">
-                      <i className={`${stat.icon} text-primary text-lg`}></i>
+                {(() => {
+                  // 计算真实的统计数据
+                  const totalWorks = userWorks ? userWorks.length : 0;
+                  const totalLikes = userWorks ? userWorks.reduce((sum, work) => sum + (work.likesCount || 0), 0) : 0;
+                  
+                  // 计算使用时长：从第一个作品到现在的时间
+                  let usageHours = 0;
+                  if (userWorks && userWorks.length > 0) {
+                    const firstWorkDate = new Date(Math.min(...userWorks.map(work => new Date(work.createdAt).getTime())));
+                    const now = new Date();
+                    const diffDays = Math.ceil((now.getTime() - firstWorkDate.getTime()) / (1000 * 60 * 60 * 24));
+                    usageHours = Math.floor(diffDays * 0.5); // 假设每天使用0.5小时
+                  }
+                  
+                  const stats = [
+                    { 
+                      label: '创作作品', 
+                      value: totalWorks.toString(), 
+                      icon: 'fas fa-palette' 
+                    },
+                    { label: '使用时长', value: `${usageHours}h`, icon: 'fas fa-clock' },
+                    { label: '获得点赞', value: totalLikes.toString(), icon: 'fas fa-heart' }
+                  ];
+                  
+                  return stats.map((stat, index) => (
+                    <div key={index} className="text-center">
+                      <div className="flex items-center justify-center mb-2">
+                        <i className={`${stat.icon} text-primary text-lg`}></i>
+                      </div>
+                      <div className="text-2xl font-bold text-slate-800">{stat.value}</div>
+                      <div className="text-sm text-slate-600">{stat.label}</div>
                     </div>
-                    <div className="text-2xl font-bold text-slate-800">{stat.value}</div>
-                    <div className="text-sm text-slate-600">{stat.label}</div>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
             </div>
           </div>
@@ -164,27 +312,61 @@ export default function ProfilePage() {
             </Link>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {myArtworks.map((src, index) => (
-              <div key={index} className="group cursor-pointer">
-                <div className="relative aspect-square overflow-hidden rounded-xl shadow-md">
-                  <Image
-                    src={src}
-                    alt={`作品 ${index + 1}`}
-                    fill
-                    className="object-cover transition-transform duration-300 group-hover:scale-110"
-                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300"></div>
-                  <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="bg-white/90 backdrop-blur-sm rounded-lg p-2 text-center">
-                      <i className="fas fa-eye text-slate-600 text-sm"></i>
+          {worksLoading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="animate-pulse">
+                  <div className="aspect-square bg-slate-200 rounded-xl"></div>
+                </div>
+              ))}
+            </div>
+          ) : userWorks && userWorks.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {userWorks.slice(0, 6).map((work, index) => (
+                <div key={work.id} className="group cursor-pointer">
+                  <div className="relative aspect-square overflow-hidden rounded-xl shadow-md">
+                    <Image
+                      src={work.thumbnailUrl || work.mediaUrl}
+                      alt={work.title}
+                      fill
+                      className="object-cover transition-transform duration-300 group-hover:scale-110"
+                      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                      onError={(e) => {
+                        // 如果图片加载失败，显示默认图片
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/20250731114736.jpg';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300"></div>
+                    <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <div className="bg-white/90 backdrop-blur-sm rounded-lg p-2 text-center">
+                        <i className="fas fa-eye text-slate-600 text-xs"></i>
+                      </div>
+                    </div>
+                    {/* 内容类型标识 */}
+                    <div className="absolute top-2 left-2">
+                      <div className="bg-black/50 text-white px-2 py-1 rounded-full text-xs">
+                        {work.contentType === 'image' && <i className="fas fa-image"></i>}
+                        {work.contentType === 'video' && <i className="fas fa-video"></i>}
+                        {work.contentType === 'audio' && <i className="fas fa-music"></i>}
+                        {work.contentType === 'text' && <i className="fas fa-file-alt"></i>}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">🎨</div>
+              <h4 className="text-xl font-semibold text-slate-700 mb-2">还没有作品</h4>
+              <p className="text-slate-500 mb-6">开始创作你的第一个AI作品吧！</p>
+              <Link href="/image-gen" className="inline-flex items-center bg-blue-500 text-white font-semibold px-6 py-3 rounded-xl hover:bg-blue-600 transition-colors">
+                <i className="fas fa-plus mr-2"></i>
+                开始创作
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* 会员升级卡片 */}
@@ -233,5 +415,13 @@ export default function ProfilePage() {
       {/* Tab导航 */}
       <TabBar />
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <ProtectedRoute>
+      <ProfileContent />
+    </ProtectedRoute>
   );
 }

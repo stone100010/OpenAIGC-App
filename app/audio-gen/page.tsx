@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
+import { ProtectedRoute } from '@/components/auth';
 
 const formatTime = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
@@ -10,7 +11,7 @@ const formatTime = (seconds: number): string => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-export default function AudioGenPage() {
+function AudioGenContent() {
   const [text, setText] = useState('');
   const [voice, setVoice] = useState('nova');
   const [speed, setSpeed] = useState('normal');
@@ -597,5 +598,13 @@ export default function AudioGenPage() {
       {/* Tab导航 */}
       <TabBar />
     </div>
+  );
+}
+
+export default function AudioGenPage() {
+  return (
+    <ProtectedRoute>
+      <AudioGenContent />
+    </ProtectedRoute>
   );
 }

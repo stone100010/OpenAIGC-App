@@ -6,6 +6,7 @@ interface User {
   id: string;
   email: string;
   name: string;
+  username: string;
   avatar?: string;
   isPro: boolean;
   joinDate: string;
@@ -14,6 +15,15 @@ interface User {
     duration: string;
     likes: number;
   };
+}
+
+// 生成UUID v4格式的函数
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
 interface AuthContextType {
@@ -65,16 +75,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userName = email.split('@')[0];
         }
         
+        // 使用数据库中存在的odyssey用户ID
+        const userId = 'ad57ef07-8446-472f-9fda-c0068798a2e0';
+        
         const mockUser: User = {
-          id: '1',
+          id: userId,
+          username: 'Odyssey Warsaw',
           email: email.includes('@') ? email : `${email}@openai.com`,
-          name: userName,
-          isPro: Math.random() > 0.5, // 随机是否为Pro用户
-          joinDate: new Date().toLocaleDateString('zh-CN'),
+          name: 'Odyssey Warsaw',
+          isPro: true, // 使用数据库中的真实值
+          joinDate: '2025年11月23日',
           stats: {
-            artworks: Math.floor(Math.random() * 100),
-            duration: `${Math.floor(Math.random() * 200)}h`,
-            likes: Math.floor(Math.random() * 2000)
+            artworks: 92, // 使用数据库中的真实值
+            duration: '150h',
+            likes: 1200
           }
         };
         
@@ -100,8 +114,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await new Promise(resolve => setTimeout(resolve, 1200));
       
       if (name && password && inviteCode) {
+        // 生成UUID格式的用户ID
+        const userId = generateUUID();
+        
         const newUser: User = {
-          id: Date.now().toString(),
+          id: userId,
+          username: name,
           email: `${name}@openai.com`, // 生成临时邮箱
           name,
           isPro: false,

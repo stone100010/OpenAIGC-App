@@ -3,6 +3,159 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== 公共组件类 ===== */
+@layer components {
+  /* 图标按钮 */
+  .btn-icon {
+    @apply w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300;
+  }
+
+  .btn-icon-sm {
+    @apply w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300;
+  }
+
+  .btn-icon-lg {
+    @apply w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300;
+  }
+
+  .btn-icon-glass {
+    @apply btn-icon backdrop-blur-sm bg-white/20 hover:bg-white/40 text-white;
+  }
+
+  .btn-icon-liked {
+    @apply btn-icon bg-red-500/90 text-white shadow-lg;
+  }
+
+  .btn-icon-favorited {
+    @apply btn-icon bg-amber-500/90 text-white shadow-lg;
+  }
+
+  /* 表单输入 */
+  .input-glass {
+    @apply w-full p-3 bg-white/70 backdrop-blur-sm rounded-xl
+           border border-slate-200/50
+           focus:outline-none focus:ring-2 focus:ring-amber-500/30
+           transition-all duration-300;
+  }
+
+  .input-glass-dark {
+    @apply w-full p-3 bg-slate-800/70 backdrop-blur-sm rounded-xl
+           border border-slate-600/50 text-white
+           focus:outline-none focus:ring-2 focus:ring-amber-500/30
+           transition-all duration-300;
+  }
+
+  /* 表单标签 */
+  .form-label {
+    @apply block text-sm font-medium text-slate-700 mb-2;
+  }
+
+  /* 主按钮 */
+  .btn-primary {
+    @apply px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600
+           text-white rounded-xl font-medium
+           hover:shadow-lg transition-all duration-300;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium
+           hover:bg-slate-200 transition-all duration-300;
+  }
+
+  /* 渐变背景 */
+  .gradient-primary {
+    @apply bg-gradient-to-r from-amber-500 to-orange-600;
+  }
+
+  .gradient-blue {
+    @apply bg-gradient-to-br from-blue-500 to-indigo-600;
+  }
+
+  .gradient-green {
+    @apply bg-gradient-to-br from-green-500 to-teal-600;
+  }
+
+  .gradient-red {
+    @apply bg-gradient-to-br from-red-500 to-pink-600;
+  }
+
+  .gradient-purple {
+    @apply bg-gradient-to-br from-purple-500 to-pink-600;
+  }
+
+  /* 悬浮效果 */
+  .hover-scale {
+    @apply transition-transform duration-300 hover:scale-105;
+  }
+
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg;
+  }
+
+  /* 遮罩层 */
+  .overlay-blur {
+    @apply absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300;
+  }
+
+  .overlay-dark {
+    @apply absolute inset-0 bg-black/50;
+  }
+
+  /* 淡入淡出 */
+  .fade-on-hover {
+    @apply opacity-0 group-hover:opacity-100 transition-opacity duration-300;
+  }
+
+  /* 统计数值 */
+  .stat-value {
+    @apply text-2xl font-bold;
+  }
+
+  .stat-label {
+    @apply text-sm text-slate-600;
+  }
+
+  /* 标签 */
+  .tag {
+    @apply px-3 py-1 text-sm rounded-full transition-colors cursor-pointer;
+  }
+
+  .tag-blue {
+    @apply tag bg-blue-100 text-blue-700 hover:bg-blue-200;
+  }
+
+  .tag-green {
+    @apply tag bg-green-100 text-green-700 hover:bg-green-200;
+  }
+
+  .tag-red {
+    @apply tag bg-red-100 text-red-700 hover:bg-red-200;
+  }
+
+  .tag-purple {
+    @apply tag bg-purple-100 text-purple-700 hover:bg-purple-200;
+  }
+
+  .tag-amber {
+    @apply tag bg-amber-100 text-amber-700 hover:bg-amber-200;
+  }
+
+  /* 截断文本 */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
 /* 玻璃拟态样式 */
 .glass {
   background: rgba(255, 255, 255, 0.25);

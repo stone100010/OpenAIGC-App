@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
+import { ProtectedRoute } from '@/components/auth';
 
 interface PrivacySettings {
   profileVisibility: 'public' | 'friends' | 'private';
@@ -30,7 +31,7 @@ interface ThirdPartyApp {
   status: 'active' | 'inactive';
 }
 
-export default function PrivacyPage() {
+function PrivacyContent() {
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>({
     profileVisibility: 'friends',
     workVisibility: 'unlisted',
@@ -443,5 +444,13 @@ export default function PrivacyPage() {
       
       <TabBar />
     </div>
+  );
+}
+
+export default function PrivacyPage() {
+  return (
+    <ProtectedRoute>
+      <PrivacyContent />
+    </ProtectedRoute>
   );
 }

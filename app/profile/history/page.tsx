@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
 import Link from 'next/link';
+import { ProtectedRoute } from '@/components/auth';
 
 interface CreationItem {
   id: string;
@@ -24,114 +25,59 @@ interface CreationItem {
   };
 }
 
-const mockHistory: CreationItem[] = [
-  {
-    id: '1',
-    title: '梦幻森林夜景',
-    type: 'image',
-    thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '夜晚的梦幻森林，萤火虫飞舞，月光洒在古老的树木上',
-    createdAt: '2024-11-21T10:30:00Z',
-    tags: ['夜景', '森林', '神秘'],
-    isLiked: true,
-    isPublic: true,
-    stats: { views: 156, likes: 12, downloads: 8 }
-  },
-  {
-    id: '2',
-    title: '科技未来城市',
-    type: 'image',
-    thumbnail: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '未来科技城市，高楼大厦，飞行汽车，霓虹灯光',
-    createdAt: '2024-11-20T15:45:00Z',
-    tags: ['未来', '科技', '城市'],
-    isLiked: false,
-    isPublic: false,
-    stats: { views: 89, likes: 6, downloads: 3 }
-  },
-  {
-    id: '3',
-    title: '太空音乐创想',
-    type: 'audio',
-    thumbnail: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '深空背景音乐，神秘而壮观',
-    createdAt: '2024-11-19T20:15:00Z',
-    duration: '3:24',
-    tags: ['音乐', '太空', '神秘'],
-    isLiked: true,
-    isPublic: true,
-    stats: { views: 234, likes: 18, downloads: 12 }
-  },
-  {
-    id: '4',
-    title: 'AI概念视频',
-    type: 'video',
-    thumbnail: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '展示人工智能概念的动画视频',
-    createdAt: '2024-11-18T14:20:00Z',
-    duration: '0:45',
-    tags: ['AI', '概念', '动画'],
-    isLiked: false,
-    isPublic: true,
-    stats: { views: 445, likes: 32, downloads: 25 }
-  },
-  {
-    id: '5',
-    title: '抽象艺术作品',
-    type: 'image',
-    thumbnail: 'https://images.unsplash.com/photo-1541961017774-22349e4a1262?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '现代抽象艺术，色彩丰富，线条流畅',
-    createdAt: '2024-11-17T11:10:00Z',
-    tags: ['抽象', '艺术', '色彩'],
-    isLiked: true,
-    isPublic: false,
-    stats: { views: 67, likes: 8, downloads: 2 }
-  },
-  {
-    id: '6',
-    title: '电子音乐节拍',
-    type: 'audio',
-    thumbnail: 'https://images.unsplash.com/photo-1536240478700-b869070f9279?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '强劲的电子音乐，节拍感强烈',
-    createdAt: '2024-11-16T16:30:00Z',
-    duration: '2:58',
-    tags: ['电子', '音乐', '节拍'],
-    isLiked: false,
-    isPublic: true,
-    stats: { views: 178, likes: 15, downloads: 9 }
-  },
-  {
-    id: '7',
-    title: '文案创作灵感',
-    type: 'text',
-    thumbnail: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '科技产品推广文案，简洁有力',
-    createdAt: '2024-11-15T09:45:00Z',
-    tags: ['文案', '科技', '推广'],
-    isLiked: true,
-    isPublic: false,
-    stats: { views: 23, likes: 3, downloads: 1 }
-  },
-  {
-    id: '8',
-    title: '水下世界探索',
-    type: 'video',
-    thumbnail: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '美丽的水下世界，色彩斑斓的珊瑚礁',
-    createdAt: '2024-11-14T13:20:00Z',
-    duration: '1:12',
-    tags: ['水下', '海洋', '自然'],
-    isLiked: true,
-    isPublic: true,
-    stats: { views: 356, likes: 28, downloads: 18 }
-  }
-];
-
-export default function HistoryPage() {
+function HistoryContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
   const [sortBy, setSortBy] = useState('date');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [history, setHistory] = useState<CreationItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // 从数据库加载创作历史
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await fetch('/api/creative-works-simple?limit=100&offset=0');
+        const data = await response.json();
+
+        if (data.success) {
+          const formattedHistory: CreationItem[] = data.data.works.map((work: any) => ({
+            id: work.id,
+            title: work.title,
+            type: work.contentType,
+            thumbnail: work.thumbnailUrl || work.mediaUrl,
+            prompt: work.description || '',
+            createdAt: work.createdAt,
+            duration: work.duration ? `${Math.floor(work.duration / 60)}:${(work.duration % 60).toString().padStart(2, '0')}` : undefined,
+            tags: work.tags || [],
+            isLiked: false,
+            isPublic: true,
+            stats: {
+              views: work.viewsCount || 0,
+              likes: work.likesCount || 0,
+              downloads: 0
+            }
+          }));
+
+          setHistory(formattedHistory);
+          setTotalCount(data.data.pagination.total);
+        } else {
+          throw new Error(data.message || '加载失败');
+        }
+      } catch (err) {
+        console.error('加载创作历史失败:', err);
+        setError(err instanceof Error ? err.message : '加载失败');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadHistory();
+  }, []);
 
   const typeOptions = [
     { id: 'all', label: '全部', icon: 'fas fa-layer-group' },
@@ -148,7 +94,7 @@ export default function HistoryPage() {
     { id: 'title', label: '按标题', icon: 'fas fa-sort-alpha-down' }
   ];
 
-  const filteredHistory = mockHistory
+  const filteredHistory = history
     .filter(item => {
       const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            item.prompt.toLowerCase().includes(searchTerm.toLowerCase());
@@ -200,8 +146,36 @@ export default function HistoryPage() {
     console.log('分享作品:', id);
   };
 
-  const handleDelete = (id: string) => {
-    console.log('删除作品:', id);
+  const handleDelete = async (id: string) => {
+    // 找到要删除的作品
+    const workToDelete = history.find(item => item.id === id);
+    if (!workToDelete) return;
+
+    // 显示确认对话框
+    const confirmed = window.confirm(`确定要删除作品"${workToDelete.title}"吗？此操作不可撤销。`);
+    if (!confirmed) return;
+
+    try {
+      // 调用删除API
+      const response = await fetch(`/api/creative-works?id=${id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // 从本地状态中移除已删除的作品
+        setHistory(prevHistory => prevHistory.filter(item => item.id !== id));
+        
+        // 显示成功提示
+        alert('作品删除成功！');
+      } else {
+        throw new Error(data.message || '删除失败');
+      }
+    } catch (error) {
+      console.error('删除作品失败:', error);
+      alert(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
   };
 
   return (
@@ -216,25 +190,54 @@ export default function HistoryPage() {
           <p className="text-slate-600">查看和管理您的所有创作作品</p>
         </div>
 
-        {/* 统计概览 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-blue-600 mb-1">48</div>
-            <div className="text-sm text-slate-600">总作品</div>
-          </GlassCard>
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-green-600 mb-1">12</div>
-            <div className="text-sm text-slate-600">公开作品</div>
-          </GlassCard>
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-purple-600 mb-1">156</div>
-            <div className="text-sm text-slate-600">获得点赞</div>
-          </GlassCard>
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-orange-600 mb-1">2.3k</div>
-            <div className="text-sm text-slate-600">总浏览量</div>
-          </GlassCard>
-        </div>
+        {/* 加载状态 */}
+        {isLoading && (
+          <div className="flex justify-center items-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+            <span className="ml-3 text-slate-600">加载中...</span>
+          </div>
+        )}
+
+        {/* 错误状态 */}
+        {error && (
+          <div className="text-center py-8">
+            <p className="text-red-500 mb-4">加载失败: {error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+            >
+              重新加载
+            </button>
+          </div>
+        )}
+
+        {!isLoading && !error && (
+          <>
+            {/* 统计概览 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-blue-600 mb-1">{totalCount}</div>
+                <div className="text-sm text-slate-600">总作品</div>
+              </GlassCard>
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-green-600 mb-1">
+                  {totalCount}
+                </div>
+                <div className="text-sm text-slate-600">公开作品</div>
+              </GlassCard>
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-purple-600 mb-1">
+                  {history.reduce((sum, h) => sum + h.stats.likes, 0)}
+                </div>
+                <div className="text-sm text-slate-600">获得点赞</div>
+              </GlassCard>
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-orange-600 mb-1">
+                  {history.reduce((sum, h) => sum + h.stats.views, 0)}
+                </div>
+                <div className="text-sm text-slate-600">总浏览量</div>
+              </GlassCard>
+            </div>
 
         {/* 搜索和筛选 */}
         <GlassCard className="mb-8">
@@ -325,7 +328,7 @@ export default function HistoryPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-slate-800">
-              共找到 {filteredHistory.length} 个作品
+              共找到 {totalCount} 个作品
             </h2>
           </div>
 
@@ -355,6 +358,13 @@ export default function HistoryPage() {
                         alt={item.title}
                         fill
                         className="object-cover transition-transform duration-300 group-hover:scale-110"
+                        onError={(e) => {
+                          // 只有当图片真正加载失败时才显示默认图片
+                          const target = e.target as HTMLImageElement;
+                          if (target.src !== `${window.location.origin}/20250731114736.jpg`) {
+                            target.src = '/20250731114736.jpg';
+                          }
+                        }}
                       />
                       
                       {/* 类型标识 */}
@@ -423,9 +433,8 @@ export default function HistoryPage() {
 
                     {/* 内容信息 */}
                     <div className={viewMode === 'list' ? 'flex-1' : ''}>
-                      <h3 className="font-semibold text-slate-800 mb-2 line-clamp-1">{item.title}</h3>
                       <p className="text-sm text-slate-600 mb-3 line-clamp-2">{item.prompt}</p>
-                      
+
                       {/* 标签 */}
                       <div className="flex flex-wrap gap-1 mb-3">
                         {item.tags.slice(0, 3).map((tag, index) => (
@@ -454,9 +463,19 @@ export default function HistoryPage() {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
-      
+
       <TabBar />
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <ProtectedRoute>
+      <HistoryContent />
+    </ProtectedRoute>
   );
 }

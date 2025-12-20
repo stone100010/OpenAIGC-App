@@ -4,6 +4,7 @@ import { useState } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
+import { ProtectedRoute } from '@/components/auth';
 
 interface OfflineItem {
   id: string;
@@ -17,7 +18,7 @@ interface OfflineItem {
   quality: 'standard' | 'high' | 'ultra';
 }
 
-export default function OfflinePage() {
+function OfflineContent() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [autoSync, setAutoSync] = useState(true);
   const [downloadQuality, setDownloadQuality] = useState<'standard' | 'high' | 'ultra'>('high');
@@ -434,5 +435,13 @@ export default function OfflinePage() {
       
       <TabBar />
     </div>
+  );
+}
+
+export default function OfflinePage() {
+  return (
+    <ProtectedRoute>
+      <OfflineContent />
+    </ProtectedRoute>
   );
 }

@@ -3,6 +3,7 @@
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Link from 'next/link';
+import { ProtectedRoute } from '@/components/auth';
 
 const plans = [
   {
@@ -59,7 +60,7 @@ const plans = [
   }
 ];
 
-export default function SubscriptionPage() {
+function SubscriptionContent() {
   return (
     <div className="min-h-screen pb-24">
       <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8">
@@ -265,5 +266,13 @@ export default function SubscriptionPage() {
       {/* Tab导航 */}
       <TabBar />
     </div>
+  );
+}
+
+export default function SubscriptionPage() {
+  return (
+    <ProtectedRoute>
+      <SubscriptionContent />
+    </ProtectedRoute>
   );
 }

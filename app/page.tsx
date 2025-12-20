@@ -34,14 +34,6 @@ export default function WelcomePage() {
           </p>
         </div>
 
-        {/* 登录状态显示 */}
-        {isAuthenticated && user && (
-          <div className="glass rounded-2xl p-4 mb-6 text-center">
-            <p className="text-slate-600">欢迎回来，</p>
-            <p className="text-xl font-bold text-slate-800">{user.name}</p>
-          </div>
-        )}
-
         {/* 功能介绍卡片 */}
         <div className="space-y-4 mb-6">
           {/* 图像生成 - 左对齐 */}

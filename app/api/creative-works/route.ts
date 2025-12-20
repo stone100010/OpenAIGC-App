@@ -8,9 +8,11 @@ export async function GET(request: NextRequest) {
     // 获取查询参数
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type'); // 'image', 'video', 'text', 'audio'
+    const authorId = searchParams.get('author_id'); // 作者ID
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = parseInt(searchParams.get('offset') || '0');
     const featured = searchParams.get('featured') === 'true';
+    const sort = searchParams.get('sort') || 'created_at.desc'; // 排序方式
 
     // 连接到数据库
     client = new Client({
@@ -28,8 +30,14 @@ export async function GET(request: NextRequest) {
     let paramIndex = 1;
 
     if (type && ['image', 'video', 'text', 'audio'].includes(type)) {
-      conditions.push(`cw.content_type = ${paramIndex}`);
+      conditions.push(`cw.content_type = $${paramIndex}`);
       queryParams.push(type);
+      paramIndex++;
+    }
+
+    if (authorId) {
+      conditions.push(`cw.creator_id = $${paramIndex}`);
+      queryParams.push(authorId);
       paramIndex++;
     }
 
@@ -38,6 +46,15 @@ export async function GET(request: NextRequest) {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // 处理排序
+    const sortOptions = {
+      'created_at.desc': 'ORDER BY cw.created_at DESC',
+      'created_at.asc': 'ORDER BY cw.created_at ASC',
+      'views_count.desc': 'ORDER BY cw.views_count DESC',
+      'likes_count.desc': 'ORDER BY cw.likes_count DESC'
+    };
+    const orderByClause = sortOptions[sort as keyof typeof sortOptions] || sortOptions['created_at.desc'];
 
     // 查询创作作品
     const query = `
@@ -65,8 +82,8 @@ export async function GET(request: NextRequest) {
       LEFT JOIN users u ON cw.creator_id = u.id
       LEFT JOIN creative_categories cc ON cw.content_type = cc.name
       ${whereClause}
-      ORDER BY cw.is_featured DESC, cw.created_at DESC
-      LIMIT ${paramIndex} OFFSET ${paramIndex + 1};
+      ${orderByClause}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
     `;
 
     queryParams.push(limit, offset);
@@ -103,10 +120,18 @@ export async function GET(request: NextRequest) {
     // 获取总数
     const countConditions = ['is_public = true'];
     const countParams: any[] = [];
+    let countParamIndex = 1;
 
     if (type && ['image', 'video', 'text', 'audio'].includes(type)) {
-      countConditions.push('content_type = $1');
+      countConditions.push(`content_type = $${countParamIndex}`);
       countParams.push(type);
+      countParamIndex++;
+    }
+
+    if (authorId) {
+      countConditions.push(`creator_id = $${countParamIndex}`);
+      countParams.push(authorId);
+      countParamIndex++;
     }
 
     if (featured) {
@@ -212,7 +237,7 @@ export async function POST(request: NextRequest) {
     // 获取管理员用户ID
     const adminResult = await client.query(
       'SELECT id FROM users WHERE username = $1',
-      ['odyssey']
+      ['Odyssey Warsaw']
     );
 
     if (adminResult.rows.length === 0) {
@@ -266,6 +291,71 @@ export async function POST(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : '未知错误',
         message: '创建创作作品失败'
+      },
+      { status: 500 }
+    );
+  } finally {
+    if (client) {
+      await client.end();
+    }
+  }
+}
+
+// 删除创作作品
+export async function DELETE(request: NextRequest) {
+  let client: Client | null = null;
+  
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: '缺少作品ID参数' },
+        { status: 400 }
+      );
+    }
+
+    // 连接到数据库
+    client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+
+    await client.connect();
+
+    // 检查作品是否存在
+    const checkQuery = 'SELECT id, title FROM creative_works WHERE id = $1';
+    const checkResult = await client.query(checkQuery, [id]);
+
+    if (checkResult.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, message: '作品不存在' },
+        { status: 404 }
+      );
+    }
+
+    // 删除作品
+    const deleteQuery = 'DELETE FROM creative_works WHERE id = $1';
+    await client.query(deleteQuery, [id]);
+
+    console.log('创作作品已删除:', { id, title: checkResult.rows[0].title });
+
+    return NextResponse.json({
+      success: true,
+      message: '创作作品删除成功'
+    });
+
+  } catch (error) {
+    console.error('删除创作作品失败:', error);
+    
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : '未知错误',
+        message: '删除创作作品失败'
       },
       { status: 500 }
     );

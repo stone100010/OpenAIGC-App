@@ -1,347 +1,213 @@
 'use client';
 
+import { useState, useEffect, useRef, useCallback } from 'react';
 import TabBar from '@/components/ui/TabBar';
-import GlassCard from '@/components/ui/GlassCard';
-import Image from 'next/image';
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import { WaterfallGrid } from '@/components/works';
+import { WorkListItem, ContentType } from '@/types/work';
+import { ProtectedRoute } from '@/components/auth';
 
-// 创作作品数据类型定义
-interface CreativeWork {
-  id: string;
-  title: string;
-  description: string;
-  content_type: 'image' | 'video' | 'text' | 'audio';
-  content_data?: {
-    content?: string;
-    aspectRatio?: string;
-    duration?: string;
-  };
-  media_url?: string;
-  thumbnail_url?: string;
-  tags?: string[];
-  duration?: number;
-  views_count: number;
-  likes_count: number;
-  created_at: string;
-  creator: {
-    username: string;
-    display_name: string;
-  };
-  category?: {
-    name: string;
-    icon: string;
-    color: string;
-  };
-}
-
-// API响应类型
-interface ApiResponse {
-  success: boolean;
-  data: {
-    works: CreativeWork[];
-    pagination: {
-      total: number;
-      limit: number;
-      offset: number;
-      hasMore: boolean;
-    };
-    stats: {
-      total: number;
-      image: number;
-      video: number;
-      text: number;
-      audio: number;
-    };
-  };
-  message: string;
-}
-
-export default function HomePage() {
-  const [displayedWorks, setDisplayedWorks] = useState<CreativeWork[]>([]);
-  const [allWorks, setAllWorks] = useState<CreativeWork[]>([]);
+function HomeContent() {
+  const [works, setWorks] = useState<WorkListItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ContentType | 'all'>('all');
+  const loadingRef = useRef(false);
 
-  // 加载创作作品数据
-  const loadWorks = useCallback(async (offset = 0, limit = 20) => {
-    if (isLoading) return;
-    
-    setIsLoading(true);
-    setLoadingError(null);
-    
+  // 类型筛选配置
+  const filterOptions: { key: ContentType | 'all'; label: string; icon: string }[] = [
+    { key: 'all', label: '全部', icon: 'fas fa-th-large' },
+    { key: 'image', label: '图片', icon: 'fas fa-image' },
+    { key: 'video', label: '视频', icon: 'fas fa-video' },
+    { key: 'audio', label: '音频', icon: 'fas fa-music' },
+    { key: 'text', label: '文本', icon: 'fas fa-file-alt' },
+  ];
+
+  // 加载作品数据
+  const loadWorks = useCallback(async (reset = false) => {
+    if (loadingRef.current) return;
+
     try {
-      const response = await fetch(`/api/creative-works-simple?limit=${limit}&offset=${offset}`);
-      const data: ApiResponse = await response.json();
-      
-      if (data.success) {
-        const newWorks = data.data.works;
-        
-        if (offset === 0) {
-          setAllWorks(newWorks);
-          setDisplayedWorks(newWorks.slice(0, 8));
-        } else {
-          setAllWorks(prev => [...prev, ...newWorks]);
-          setDisplayedWorks(prev => [...prev, ...newWorks]);
-        }
-        
-        setHasMore(data.data.pagination.hasMore);
-      } else {
+      loadingRef.current = true;
+
+      if (reset) {
+        setIsLoading(true);
+      }
+
+      setError(null);
+
+      const currentOffset = reset ? 0 : offset;
+      const typeParam = activeFilter !== 'all' ? `&type=${activeFilter}` : '';
+      const response = await fetch(
+        `/api/creative-works-simple?offset=${currentOffset}&limit=12${typeParam}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
         throw new Error(data.message || '获取数据失败');
       }
-    } catch (error) {
-      console.error('加载创作作品失败:', error);
-      setLoadingError(error instanceof Error ? error.message : '加载失败');
+
+      const newWorks: WorkListItem[] = data.data.works || [];
+
+      if (reset) {
+        setWorks(newWorks);
+        setOffset(12);
+      } else {
+        setWorks(prev => {
+          const existingIds = new Set(prev.map(w => w.id));
+          const uniqueNewWorks = newWorks.filter(work => !existingIds.has(work.id));
+          return [...prev, ...uniqueNewWorks];
+        });
+        setOffset(prev => prev + 12);
+      }
+
+      setHasMore(data.data.pagination?.hasMore ?? newWorks.length === 12);
+
+    } catch (err) {
+      console.error('加载失败:', err);
+      setError(err instanceof Error ? err.message : '加载失败，请重试');
     } finally {
       setIsLoading(false);
+      loadingRef.current = false;
     }
-  }, [isLoading]);
+  }, [offset, activeFilter]);
 
   // 初始加载
   useEffect(() => {
-    loadWorks();
-  }, []);
+    loadWorks(true);
+  }, [activeFilter]);
+
+  // 切换筛选
+  const handleFilterChange = (filter: ContentType | 'all') => {
+    if (filter === activeFilter) return;
+    setActiveFilter(filter);
+    setOffset(0);
+    setWorks([]);
+  };
 
   // 加载更多
-  const loadMore = useCallback(() => {
-    if (isLoading || !hasMore) return;
-    
-    const currentOffset = allWorks.length;
-    loadWorks(currentOffset, 20);
-  }, [isLoading, hasMore, allWorks.length, loadWorks]);
-
-  // 懒加载逻辑
-  useEffect(() => {
-    let isScrolling = false;
-    let scrollTimeout: NodeJS.Timeout;
-    
-    const handleScroll = () => {
-      if (isScrolling || isLoading || !hasMore) return;
-      
-      isScrolling = true;
-      
-      requestAnimationFrame(() => {
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const scrollHeight = document.documentElement.scrollHeight;
-        const clientHeight = window.innerHeight;
-        
-        if (scrollTop + clientHeight >= scrollHeight - 1000) {
-          loadMore();
-        }
-        
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => {
-          isScrolling = false;
-        }, 100);
-      });
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      clearTimeout(scrollTimeout);
-    };
-  }, [loadMore, isLoading, hasMore]);
-
-  const getAspectRatioClass = (aspectRatio?: string) => {
-    switch (aspectRatio) {
-      case '1:1':
-        return 'aspect-square';
-      case '3:4':
-        return 'aspect-[3/4]';
-      case '4:3':
-        return 'aspect-[4/3]';
-      case '16:9':
-        return 'aspect-video';
-      case '9:16':
-        return 'aspect-[9/16]';
-      default:
-        return 'aspect-square';
+  const handleLoadMore = useCallback(() => {
+    if (!loadingRef.current && hasMore) {
+      loadWorks(false);
     }
-  };
-
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return null;
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, [hasMore, loadWorks]);
 
   return (
-    <div className="min-h-screen pb-24">
-      <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8">
-        {/* 页面标题 */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-800 mb-2">创作天地</h1>
-          <p className="text-slate-600 text-lg">发现无限创意可能</p>
-        </div>
+    <div className="min-h-screen pb-24 bg-gradient-to-br from-orange-50 via-white to-amber-50">
+      {/* 固定顶部 */}
+      <div className="sticky top-0 z-10 bg-gradient-to-br from-orange-50/95 via-white/95 to-amber-50/95 backdrop-blur-sm border-b border-slate-200/50">
+        <div className="max-w-lg mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h1 className="text-xl font-bold text-slate-800">创作天地</h1>
+              <p className="text-xs text-slate-500">发现无限创意可能</p>
+            </div>
+            <button
+              onClick={() => loadWorks(true)}
+              disabled={isLoading}
+              className="w-9 h-9 rounded-full bg-white/80 hover:bg-white flex items-center justify-center shadow-sm transition-colors disabled:opacity-50"
+            >
+              <i className={`fas fa-sync-alt text-slate-600 text-sm ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
 
-        {/* 错误提示 */}
-        {loadingError && (
-          <div className="text-center py-8">
-            <p className="text-red-500 mb-4">加载失败: {loadingError}</p>
-            <button 
-              onClick={() => loadWorks(0, 20)} 
-              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+          {/* 类型筛选 */}
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
+            {filterOptions.map((option) => (
+              <button
+                key={option.key}
+                onClick={() => handleFilterChange(option.key)}
+                className={`
+                  flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
+                  transition-all duration-300
+                  ${activeFilter === option.key
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md'
+                    : 'bg-white/70 text-slate-600 hover:bg-white'
+                  }
+                `}
+              >
+                <i className={option.icon} />
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 内容区域 */}
+      <div className="max-w-lg mx-auto px-3 py-4">
+        {/* 错误状态 */}
+        {error && !isLoading && (
+          <div className="glass rounded-2xl p-6 text-center mb-4">
+            <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <i className="fas fa-exclamation-triangle text-red-500 text-xl" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-800 mb-2">加载失败</h3>
+            <p className="text-slate-600 text-sm mb-4">{error}</p>
+            <button
+              onClick={() => loadWorks(true)}
+              className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all"
             >
               重新加载
             </button>
           </div>
         )}
 
-        {/* 空状态 */}
-        {!isLoading && displayedWorks.length === 0 && !loadingError && (
-          <div className="text-center py-16">
-            <div className="text-6xl mb-4">🎨</div>
-            <h3 className="text-xl font-semibold text-slate-700 mb-2">暂无创作作品</h3>
-            <p className="text-slate-500">快来成为第一个创作者吧！</p>
-          </div>
-        )}
-
-        {/* 两列瀑布流布局 */}
-        {displayedWorks.length > 0 && (
-          <div className="columns-2 gap-4 space-y-4">
-            {displayedWorks.map((work, index) => (
-              <Link 
-                key={work.id}
-                href={`/${
-                  work.content_type === 'image' ? 'image-detail' :
-                  work.content_type === 'video' ? 'video-detail' :
-                  work.content_type === 'text' ? 'text-detail' :
-                  work.content_type === 'audio' ? 'audio-detail' :
-                  'artwork-detail'
-                }?id=${work.id}`}
-              >
-                <div className="group glass rounded-2xl overflow-hidden relative cursor-pointer transform hover:scale-105 transition-all duration-300 hover:shadow-xl break-inside-avoid mb-4">
-                  
-                  {/* 图片类型卡片 */}
-                  {work.content_type === 'image' && (
-                    <div className={`relative w-full ${getAspectRatioClass(work.content_data?.aspectRatio)}`}>
-                      <Image
-                        src={work.thumbnail_url || work.media_url || '/placeholder-image.jpg'}
-                        alt={work.title}
-                        fill
-                        className="object-cover transition-transform duration-300 group-hover:scale-110"
-                        sizes="(max-width: 768px) 100vw, 50vw"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                        <h3 className="text-lg font-semibold mb-1">{work.title}</h3>
-                        <p className="text-sm opacity-90">{work.description}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 视频类型卡片 */}
-                  {work.content_type === 'video' && (
-                    <div className={`relative w-full ${getAspectRatioClass(work.content_data?.aspectRatio)}`}>
-                      <Image
-                        src={work.thumbnail_url || work.media_url || '/placeholder-video.jpg'}
-                        alt={work.title}
-                        fill
-                        className="object-cover transition-transform duration-300 group-hover:scale-110"
-                        sizes="(max-width: 768px) 100vw, 50vw"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-                      {/* 播放按钮 */}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <i className="fas fa-play text-white text-xl ml-1"></i>
-                        </div>
-                      </div>
-                      <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                        <h3 className="text-lg font-semibold mb-1">{work.title}</h3>
-                        <p className="text-sm opacity-90">{work.description}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 文字类型卡片 */}
-                  {work.content_type === 'text' && (
-                    <div className="relative w-full p-6 flex flex-col justify-between bg-gradient-to-br from-purple-50 to-pink-50">
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-800 mb-2">{work.title}</h3>
-                        <p className="text-sm text-slate-600 mb-4">{work.description}</p>
-                        <p className="text-sm text-slate-700 leading-relaxed line-clamp-3">
-                          {work.content_data?.content || '暂无内容'}
-                        </p>
-                      </div>
-                      <div className="text-right mt-4">
-                        <span className="text-xs text-purple-500 font-medium">点击阅读更多</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 音频类型卡片 */}
-                  {work.content_type === 'audio' && (
-                    <div className="relative w-full p-6 flex flex-col justify-between bg-gradient-to-br from-green-50 to-teal-50">
-                      {/* 音频波形可视化 */}
-                      <div className="flex items-center justify-center mb-4">
-                        <div className="flex items-end space-x-1">
-                          {[10, 15, 12, 18, 8, 20, 14, 9, 16, 11, 19, 13, 7, 17, 10, 12, 15, 9, 14, 11].map((height, i) => (
-                            <div
-                              key={i}
-                              className="w-1 bg-green-400 rounded-full animate-pulse"
-                              style={{
-                                height: `${height}px`,
-                                animationDelay: `${i * 100}ms`
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-800 mb-2">{work.title}</h3>
-                        <p className="text-sm text-slate-600 mb-2">{work.description}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-green-600 font-medium">
-                            {formatDuration(work.duration) || work.content_data?.duration || '未知时长'}
-                          </span>
-                          <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                            <i className="fas fa-play text-white text-xs"></i>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  
-                  
+        {/* 骨架屏加载 */}
+        {isLoading && works.length === 0 && (
+          <div className="flex gap-3">
+            <div className="flex-1">
+              {[180, 220, 160].map((h, i) => (
+                <div key={`skeleton-l-${i}`} className="mb-4">
+                  <div className="glass rounded-2xl overflow-hidden">
+                    <div className="bg-slate-200 animate-pulse" style={{ height: `${h}px` }} />
+                  </div>
                 </div>
-              </Link>
-            ))}
+              ))}
+            </div>
+            <div className="flex-1">
+              {[150, 200, 180].map((h, i) => (
+                <div key={`skeleton-r-${i}`} className="mb-4">
+                  <div className="glass rounded-2xl overflow-hidden">
+                    <div className="bg-slate-200 animate-pulse" style={{ height: `${h}px` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* 加载更多指示器 */}
-        {isLoading && displayedWorks.length > 0 && (
-          <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
-            <span className="ml-2 text-slate-600">加载中...</span>
-          </div>
-        )}
-
-        {/* 初始加载指示器 */}
-        {isLoading && displayedWorks.length === 0 && (
-          <div className="flex justify-center items-center py-16">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-            <span className="ml-3 text-slate-600">加载创作作品中...</span>
-          </div>
-        )}
-
-        {/* 内容结束提示 */}
-        {!hasMore && displayedWorks.length > 0 && (
-          <div className="text-center py-8">
-            <p className="text-slate-500">已显示所有 {displayedWorks.length} 个作品</p>
-          </div>
+        {/* 作品瀑布流 */}
+        {!error && (
+          <WaterfallGrid
+            works={works}
+            loading={isLoading && works.length > 0}
+            hasMore={hasMore}
+            onLoadMore={handleLoadMore}
+            emptyMessage={
+              activeFilter === 'all'
+                ? '暂无创作作品'
+                : `暂无${filterOptions.find(f => f.key === activeFilter)?.label}作品`
+            }
+          />
         )}
       </div>
-      
-      {/* Tab导航 */}
+
       <TabBar />
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <ProtectedRoute>
+      <HomeContent />
+    </ProtectedRoute>
   );
 }

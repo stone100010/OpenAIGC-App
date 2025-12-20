@@ -4,8 +4,9 @@ import { useState } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
+import { ProtectedRoute } from '@/components/auth';
 
-export default function VideoGenPage() {
+function VideoGenContent() {
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState('10');
   const [style, setStyle] = useState('realistic');
@@ -380,5 +381,13 @@ export default function VideoGenPage() {
       {/* Tab导航 */}
       <TabBar />
     </div>
+  );
+}
+
+export default function VideoGenPage() {
+  return (
+    <ProtectedRoute>
+      <VideoGenContent />
+    </ProtectedRoute>
   );
 }

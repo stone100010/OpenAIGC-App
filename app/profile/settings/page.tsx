@@ -1,18 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import { ProtectedRoute } from '@/components/auth';
 
 interface UserProfile {
+  id: string;
   name: string;
+  username: string;
   email: string;
   bio: string;
-  userLocation: string;
-  website: string;
   avatar: string;
+  timezone: string;
+  language: string;
+  theme: string;
+  isPro: boolean;
+  joinDate: string;
 }
 
 interface SecuritySettings {
@@ -38,17 +46,27 @@ interface Preferences {
   showTutorials: boolean;
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
+  const router = useRouter();
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<UserProfile>({
-    name: 'Odyssey Warsaw',
-    email: 'odysseywarsaw@163.com',
-    bio: '热爱AI创作的数字艺术家，专注于探索人工智能与创意的边界。',
-    userLocation: '北京，中国',
-    website: 'https://app.openaigc.fun',
-    avatar: '/20250731114736.jpg'
+    id: '',
+    name: '',
+    username: '',
+    email: '',
+    bio: '',
+    avatar: '/20250731114736.jpg',
+    timezone: 'UTC',
+    language: 'zh-CN',
+    theme: 'light',
+    isPro: false,
+    joinDate: ''
   });
 
   const [security, setSecurity] = useState<SecuritySettings>({
@@ -74,6 +92,188 @@ export default function SettingsPage() {
     showTutorials: true
   });
 
+  // 获取认证头信息
+  const getAuthHeaders = () => {
+    return {
+      'Content-Type': 'application/json',
+      'x-user-id': user?.id || '1' // 临时使用固定ID，实际应该从认证token获取
+    };
+  };
+
+  // 加载用户档案数据
+  const loadProfileData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await fetch('/api/user/profile', {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setProfile(data.data);
+      } else {
+        setError(data.message || '加载用户档案失败');
+      }
+    } catch (error) {
+      console.error('加载用户档案失败:', error);
+      setError('网络错误，请稍后重试');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 加载用户偏好设置
+  const loadPreferences = async () => {
+    try {
+      const response = await fetch('/api/user/preferences', {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setNotifications({
+          emailNotifications: data.data.emailNotifications,
+          pushNotifications: data.data.pushNotifications,
+          marketingEmails: data.data.marketingEmails,
+          weeklyReport: data.data.weeklyReport,
+          newFeatures: data.data.newFeatures
+        });
+
+        setPreferences({
+          language: data.data.language,
+          theme: data.data.theme,
+          autoSave: data.data.autoSave,
+          highQualityExport: data.data.highQualityExport,
+          showTutorials: data.data.showTutorials
+        });
+      }
+    } catch (error) {
+      console.error('加载偏好设置失败:', error);
+    }
+  };
+
+  // 组件加载时获取数据
+  useEffect(() => {
+    if (user) {
+      loadProfileData();
+      loadPreferences();
+    }
+  }, [user]);
+
+  // 保存用户档案
+  const saveProfile = async () => {
+    try {
+      setIsSaving(true);
+      setError(null);
+
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: profile.name,
+          bio: profile.bio,
+          avatar: profile.avatar,
+          timezone: profile.timezone,
+          language: profile.language,
+          theme: profile.theme
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setIsEditing(false);
+        setProfile(data.data);
+      } else {
+        setError(data.message || '保存失败');
+      }
+    } catch (error) {
+      console.error('保存用户档案失败:', error);
+      setError('网络错误，请稍后重试');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 保存偏好设置
+  const savePreferences = async () => {
+    try {
+      setIsSaving(true);
+
+      const response = await fetch('/api/user/preferences', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          ...notifications,
+          ...preferences
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log('偏好设置保存成功');
+      }
+    } catch (error) {
+      console.error('保存偏好设置失败:', error);
+      setError('保存偏好设置失败');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 修改密码
+  const changePassword = async () => {
+    if (security.newPassword !== security.confirmPassword) {
+      setError('新密码与确认密码不匹配');
+      return;
+    }
+
+    if (security.newPassword.length < 6) {
+      setError('新密码长度至少6位');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setError(null);
+
+      const response = await fetch('/api/user/security', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          currentPassword: security.currentPassword,
+          newPassword: security.newPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSecurity({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+          twoFactorEnabled: security.twoFactorEnabled
+        });
+        alert('密码修改成功');
+      } else {
+        setError(data.message || '密码修改失败');
+      }
+    } catch (error) {
+      console.error('修改密码失败:', error);
+      setError('网络错误，请稍后重试');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: '个人信息', icon: 'fas fa-user' },
     { id: 'security', label: '账户安全', icon: 'fas fa-shield-alt' },
@@ -82,10 +282,12 @@ export default function SettingsPage() {
     { id: 'account', label: '账号管理', icon: 'fas fa-user-cog' }
   ];
 
-  const handleSave = () => {
-    setIsEditing(false);
-    // 这里可以实现保存到后端API的逻辑
-    console.log('保存设置:', { profile, security, notifications, preferences });
+  const handleSave = async () => {
+    if (activeTab === 'profile') {
+      await saveProfile();
+    } else if (activeTab === 'preferences' || activeTab === 'notifications') {
+      await savePreferences();
+    }
   };
 
   const renderProfileTab = () => (
@@ -147,25 +349,34 @@ export default function SettingsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">所在地</label>
-            <input
-              type="text"
-              value={profile.userLocation}
-                                onChange={(e) => setProfile({...profile, userLocation: e.target.value})}
+            <label className="block text-sm font-medium text-slate-700 mb-2">时区</label>
+            <select
+              value={profile.timezone}
+              onChange={(e) => setProfile({...profile, timezone: e.target.value})}
               disabled={!isEditing}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-slate-50 disabled:text-slate-500"
-            />
+            >
+              <option value="UTC">UTC</option>
+              <option value="Asia/Shanghai">中国标准时间 (UTC+8)</option>
+              <option value="America/New_York">东部时间 (UTC-5)</option>
+              <option value="Europe/London">格林威治时间 (UTC+0)</option>
+              <option value="Asia/Tokyo">日本标准时间 (UTC+9)</option>
+            </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">个人网站</label>
-            <input
-              type="url"
-              value={profile.website}
-              onChange={(e) => setProfile({...profile, website: e.target.value})}
+            <label className="block text-sm font-medium text-slate-700 mb-2">语言</label>
+            <select
+              value={profile.language}
+              onChange={(e) => setProfile({...profile, language: e.target.value})}
               disabled={!isEditing}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-slate-50 disabled:text-slate-500"
-            />
+            >
+              <option value="zh-CN">简体中文</option>
+              <option value="en-US">English</option>
+              <option value="ja-JP">日本語</option>
+              <option value="ko-KR">한국어</option>
+            </select>
           </div>
         </div>
       </div>
@@ -208,8 +419,12 @@ export default function SettingsPage() {
             />
           </div>
 
-          <button className="w-full bg-gradient-to-r from-primary to-primary/80 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300">
-            更新密码
+          <button 
+            onClick={changePassword}
+            disabled={isSaving || !security.currentPassword || !security.newPassword || !security.confirmPassword}
+            className="w-full bg-gradient-to-r from-primary to-primary/80 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? '更新中...' : '更新密码'}
           </button>
         </div>
       </GlassCard>
@@ -392,6 +607,26 @@ export default function SettingsPage() {
         </div>
       </GlassCard>
 
+      {/* 退出登录 */}
+      <GlassCard className="border-orange-200">
+        <div className="text-center">
+          <i className="fas fa-sign-out-alt text-2xl text-orange-500 mb-3"></i>
+          <h3 className="text-lg font-semibold text-orange-600 mb-2">退出登录</h3>
+          <p className="text-sm text-slate-600 mb-4">退出当前账号，返回登录页面</p>
+          <button
+            onClick={() => {
+              if (confirm('确定要退出登录吗？')) {
+                logout();
+                router.push('/');
+              }
+            }}
+            className="bg-orange-500 text-white px-6 py-3 rounded-xl font-medium hover:bg-orange-600 transition-colors"
+          >
+            退出登录
+          </button>
+        </div>
+      </GlassCard>
+
       {/* 注销账号 */}
       <GlassCard className="border-red-200">
         <div className="text-center">
@@ -406,9 +641,36 @@ export default function SettingsPage() {
     </div>
   );
 
+  // 加载状态
+  if (isLoading) {
+    return (
+      <div className="min-h-screen pb-24 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">加载设置中...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-24">
       <div className="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
+        {/* 错误提示 */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className="flex items-center">
+              <i className="fas fa-exclamation-circle text-red-500 mr-2"></i>
+              <span className="text-red-700">{error}</span>
+              <button 
+                onClick={() => setError(null)}
+                className="ml-auto text-red-500 hover:text-red-700"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+        )}
         {/* 页面标题和操作 */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -423,15 +685,17 @@ export default function SettingsPage() {
                     <>
                       <button
                         onClick={() => setIsEditing(false)}
-                        className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                        disabled={isSaving}
+                        className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
                       >
                         取消
                       </button>
                       <button
                         onClick={handleSave}
-                        className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                        disabled={isSaving}
+                        className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
                       >
-                        保存
+                        {isSaving ? '保存中...' : '保存'}
                       </button>
                     </>
                   ) : (
@@ -443,6 +707,16 @@ export default function SettingsPage() {
                     </button>
                   )}
                 </>
+              )}
+              
+              {(activeTab === 'preferences' || activeTab === 'notifications') && (
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {isSaving ? '保存中...' : '保存设置'}
+                </button>
               )}
             </div>
           </div>
@@ -478,5 +752,13 @@ export default function SettingsPage() {
       
       <TabBar />
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <ProtectedRoute>
+      <SettingsContent />
+    </ProtectedRoute>
   );
 }

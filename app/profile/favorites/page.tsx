@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import TabBar from '@/components/ui/TabBar';
 import GlassCard from '@/components/ui/GlassCard';
 import Image from 'next/image';
 import Link from 'next/link';
+import { ProtectedRoute } from '@/components/auth';
 
 interface FavoriteItem {
   id: string;
@@ -24,83 +25,58 @@ interface FavoriteItem {
   originalUrl?: string;
 }
 
-const mockFavorites: FavoriteItem[] = [
-  {
-    id: '1',
-    title: '极光之夜',
-    type: 'image',
-    thumbnail: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '绚烂的极光在夜空中舞蹈，雪山背景',
-    author: '北极星工作室',
-    createdAt: '2024-11-20T18:30:00Z',
-    tags: ['极光', '夜景', '自然'],
-    stats: { views: 2450, likes: 189, downloads: 45 }
-  },
-  {
-    id: '2',
-    title: '深海音乐盒',
-    type: 'audio',
-    thumbnail: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '深海主题的神秘音乐，悠扬动听',
-    author: '水声音符',
-    createdAt: '2024-11-19T14:20:00Z',
-    duration: '4:15',
-    tags: ['音乐', '深海', '神秘'],
-    stats: { views: 1230, likes: 95, downloads: 23 }
-  },
-  {
-    id: '3',
-    title: '时间机器概念',
-    type: 'video',
-    thumbnail: 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '科幻时间机器概念动画',
-    author: '时空实验室',
-    createdAt: '2024-11-18T16:45:00Z',
-    duration: '1:30',
-    tags: ['科幻', '时间', '概念'],
-    stats: { views: 5600, likes: 423, downloads: 89 }
-  },
-  {
-    id: '4',
-    title: '数字艺术收藏',
-    type: 'image',
-    thumbnail: 'https://images.unsplash.com/photo-1541961017774-22349e4a1262?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '现代数字艺术作品，色彩丰富',
-    author: '数字艺术馆',
-    createdAt: '2024-11-17T10:15:00Z',
-    tags: ['数字艺术', '抽象', '色彩'],
-    stats: { views: 1890, likes: 167, downloads: 34 }
-  },
-  {
-    id: '5',
-    title: '雨后清晨',
-    type: 'image',
-    thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '雨后的清晨，空气清新，露珠闪烁',
-    author: '自然摄影师',
-    createdAt: '2024-11-16T08:30:00Z',
-    tags: ['自然', '清晨', '雨后'],
-    stats: { views: 3250, likes: 289, downloads: 67 }
-  },
-  {
-    id: '6',
-    title: '电子旋律',
-    type: 'audio',
-    thumbnail: 'https://images.unsplash.com/photo-1536240478700-b869070f9279?ixlib=rb-4.0.3&w=300&h=300&fit=crop',
-    prompt: '现代电子音乐，节奏强烈',
-    author: '电子音乐人',
-    createdAt: '2024-11-15T20:00:00Z',
-    duration: '3:42',
-    tags: ['电子音乐', '节奏', '现代'],
-    stats: { views: 980, likes: 76, downloads: 19 }
-  }
-];
-
-export default function FavoritesPage() {
+function FavoritesContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // 从数据库加载收藏作品
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await fetch('/api/creative-works-simple?limit=100&offset=0');
+        const data = await response.json();
+
+        if (data.success) {
+          const formattedFavorites: FavoriteItem[] = data.data.works.map((work: any) => ({
+            id: work.id,
+            title: work.title,
+            type: work.contentType,
+            thumbnail: work.thumbnailUrl || work.mediaUrl,
+            prompt: work.description || '',
+            author: work.creator?.displayName || work.creator?.username || '未知作者',
+            createdAt: work.createdAt,
+            duration: work.duration ? `${Math.floor(work.duration / 60)}:${(work.duration % 60).toString().padStart(2, '0')}` : undefined,
+            tags: work.tags || [],
+            stats: {
+              views: work.viewsCount || 0,
+              likes: work.likesCount || 0,
+              downloads: 0
+            }
+          }));
+
+          setFavorites(formattedFavorites);
+          setTotalCount(data.data.pagination.total);
+        } else {
+          throw new Error(data.message || '加载失败');
+        }
+      } catch (err) {
+        console.error('加载收藏作品失败:', err);
+        setError(err instanceof Error ? err.message : '加载失败');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFavorites();
+  }, []);
 
   const typeOptions = [
     { id: 'all', label: '全部', icon: 'fas fa-layer-group' },
@@ -110,7 +86,7 @@ export default function FavoritesPage() {
     { id: 'text', label: '文案', icon: 'fas fa-file-text' }
   ];
 
-  const filteredFavorites = mockFavorites
+  const filteredFavorites = favorites
     .filter(item => {
       const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            item.prompt.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -191,31 +167,54 @@ export default function FavoritesPage() {
           <p className="text-slate-600">管理和查看您收藏的精彩作品</p>
         </div>
 
-        {/* 统计概览 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-red-600 mb-1">{mockFavorites.length}</div>
-            <div className="text-sm text-slate-600">总收藏</div>
-          </GlassCard>
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-blue-600 mb-1">
-              {mockFavorites.filter(f => f.type === 'image').length}
+        {/* 加载状态 */}
+        {isLoading && (
+          <div className="flex justify-center items-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+            <span className="ml-3 text-slate-600">加载中...</span>
+          </div>
+        )}
+
+        {/* 错误状态 */}
+        {error && (
+          <div className="text-center py-8">
+            <p className="text-red-500 mb-4">加载失败: {error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+            >
+              重新加载
+            </button>
+          </div>
+        )}
+
+        {!isLoading && !error && (
+          <>
+            {/* 统计概览 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-red-600 mb-1">{favorites.length}</div>
+                <div className="text-sm text-slate-600">总收藏</div>
+              </GlassCard>
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-blue-600 mb-1">
+                  {favorites.filter(f => f.type === 'image').length}
+                </div>
+                <div className="text-sm text-slate-600">图像收藏</div>
+              </GlassCard>
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-green-600 mb-1">
+                  {favorites.filter(f => f.type === 'audio').length}
+                </div>
+                <div className="text-sm text-slate-600">音频收藏</div>
+              </GlassCard>
+              <GlassCard className="text-center">
+                <div className="text-2xl font-bold text-purple-600 mb-1">
+                  {favorites.filter(f => f.type === 'video').length}
+                </div>
+                <div className="text-sm text-slate-600">视频收藏</div>
+              </GlassCard>
             </div>
-            <div className="text-sm text-slate-600">图像收藏</div>
-          </GlassCard>
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-green-600 mb-1">
-              {mockFavorites.filter(f => f.type === 'audio').length}
-            </div>
-            <div className="text-sm text-slate-600">音频收藏</div>
-          </GlassCard>
-          <GlassCard className="text-center">
-            <div className="text-2xl font-bold text-purple-600 mb-1">
-              {mockFavorites.filter(f => f.type === 'video').length}
-            </div>
-            <div className="text-sm text-slate-600">视频收藏</div>
-          </GlassCard>
-        </div>
 
         {/* 搜索和筛选 */}
         <GlassCard className="mb-8">
@@ -275,7 +274,7 @@ export default function FavoritesPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-slate-800">
-              共收藏 {filteredFavorites.length} 个作品
+              共收藏 {totalCount} 个作品
             </h2>
             
             {/* 选择模式切换 */}
@@ -316,6 +315,13 @@ export default function FavoritesPage() {
                         alt={item.title}
                         fill
                         className="object-cover transition-transform duration-300 group-hover:scale-110"
+                        onError={(e) => {
+                          // 只有当图片真正加载失败时才显示默认图片
+                          const target = e.target as HTMLImageElement;
+                          if (target.src !== `${window.location.origin}/20250731114736.jpg`) {
+                            target.src = '/20250731114736.jpg';
+                          }
+                        }}
                       />
                       
                       {/* 选择框 */}
@@ -384,8 +390,7 @@ export default function FavoritesPage() {
                     </div>
 
                     {/* 内容信息 */}
-                    <div>
-                      <h3 className="font-semibold text-slate-800 mb-2 line-clamp-1">{item.title}</h3>
+                    <div className="flex-1">
                       <p className="text-sm text-slate-600 mb-3 line-clamp-2">{item.prompt}</p>
                       
                       {/* 作者和标签 */}
@@ -446,9 +451,19 @@ export default function FavoritesPage() {
             </div>
           </div>
         </GlassCard>
+        </>
+        )}
       </div>
-      
+
       <TabBar />
     </div>
+  );
+}
+
+export default function FavoritesPage() {
+  return (
+    <ProtectedRoute>
+      <FavoritesContent />
+    </ProtectedRoute>
   );
 }
