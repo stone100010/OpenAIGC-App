@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, isLoading } = useAuth();
+  const { register, isLoading, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     password: '',
@@ -16,6 +16,20 @@ export default function RegisterPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 如果已登录，直接跳转，避免闪烁
+  if (isAuthenticated && !isSubmitting) {
+    router.replace('/profile');
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">正在跳转...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -59,7 +73,9 @@ export default function RegisterPage() {
       return;
     }
 
+    setIsSubmitting(true);
     const success = await register(formData.name, formData.password, formData.inviteCode);
+    setIsSubmitting(false);
     
     if (success) {
       router.push('/profile');
@@ -81,7 +97,7 @@ export default function RegisterPage() {
         </div>
 
         {/* 注册表单 */}
-        <GlassCard className="animate-bounce-in">
+        <GlassCard>
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* 用户名输入 */}
             <div className="space-y-2">
@@ -189,10 +205,10 @@ export default function RegisterPage() {
             {/* 注册按钮 */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting || isLoading}
               className="w-full bg-gradient-to-r from-green-500 to-teal-600 text-white font-semibold py-3 rounded-xl hover:shadow-lg transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
-              {isLoading ? (
+              {(isSubmitting || isLoading) ? (
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                   注册中...

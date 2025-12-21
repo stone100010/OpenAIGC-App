@@ -16,6 +16,7 @@ interface UserProfile {
   email: string;
   bio: string;
   avatar: string;
+  avatarData?: string;
   timezone: string;
   language: string;
   theme: string;
@@ -54,6 +55,8 @@ function SettingsContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<UserProfile>({
     id: '',
@@ -111,16 +114,51 @@ function SettingsContent() {
         headers: getAuthHeaders()
       });
 
+      // 检查响应状态
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
 
       if (data.success) {
-        setProfile(data.data);
+        // 如果返回的是mock数据（包含mock字样），优先使用AuthContext的用户信息
+        if (data.message && data.message.includes('mock') && user) {
+          setProfile(prev => ({
+            ...prev,
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            bio: data.data.bio || '',
+            avatar: data.data.avatar || '/20250731114736.jpg',
+            avatarData: data.data.avatarData,
+            location: data.data.location || '',
+            website: data.data.website || '',
+            isPro: user.isPro,
+            joinDate: user.joinDate
+          }));
+        } else {
+          setProfile(data.data);
+        }
       } else {
         setError(data.message || '加载用户档案失败');
       }
     } catch (error) {
       console.error('加载用户档案失败:', error);
       setError('网络错误，请稍后重试');
+      // 如果API失败，使用AuthContext中的数据作为备选
+      if (user) {
+        setProfile(prev => ({
+          ...prev,
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          isPro: user.isPro,
+          joinDate: user.joinDate
+        }));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -166,6 +204,111 @@ function SettingsContent() {
     }
   }, [user]);
 
+  // 处理头像上传
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // 验证文件类型
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError('仅支持JPEG、PNG、GIF、WebP格式');
+      return;
+    }
+
+    // 验证文件大小 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('文件大小不能超过5MB');
+      return;
+    }
+
+    setUploadError(null);
+    setUploading(true);
+
+    try {
+      // 将图片转换为Base64并压缩到100x100
+      const base64 = await processAndCompressImage(file);
+      
+      // 上传到服务器
+      const response = await fetch('/api/user/avatar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user?.id || ''
+        },
+        body: JSON.stringify({
+          avatarData: base64
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // 更新本地状态
+        setProfile(prev => ({ ...prev, avatarData: base64, avatar: base64 }));
+        setUploadError(null);
+        
+        // 同时更新profile API中的数据
+        await fetch('/api/user/profile', {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            ...profile,
+            avatarData: base64,
+            avatar: base64
+          })
+        });
+      } else {
+        setUploadError(data.error || '上传失败');
+      }
+    } catch (error) {
+      console.error('头像上传失败:', error);
+      setUploadError('上传失败，请重试');
+    } finally {
+      setUploading(false);
+      // 清空文件输入
+      event.target.value = '';
+    }
+  };
+
+  // 处理并压缩图片到100x100
+  const processAndCompressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        // 使用HTMLImageElement而不是Image构造函数
+        const img = document.createElement('img');
+        
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // 设置为100x100
+          canvas.width = 100;
+          canvas.height = 100;
+          
+          // 绘制并压缩
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, 100, 100);
+            
+            // 转换为Base64 (JPEG格式，质量0.8)
+            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            resolve(base64);
+          } else {
+            reject(new Error('Canvas context not available'));
+          }
+        };
+        
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   // 保存用户档案
   const saveProfile = async () => {
     try {
@@ -179,6 +322,7 @@ function SettingsContent() {
           name: profile.name,
           bio: profile.bio,
           avatar: profile.avatar,
+          avatarData: profile.avatarData,
           timezone: profile.timezone,
           language: profile.language,
           theme: profile.theme
@@ -295,20 +439,51 @@ function SettingsContent() {
       {/* 头像编辑 */}
       <GlassCard className="text-center">
         <div className="relative inline-block">
-          <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg">
-            <Image
-              src={profile.avatar}
-              alt="用户头像"
-              width={96}
-              height={96}
-              className="w-full h-full object-cover"
-            />
+          <div 
+            className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg flex items-center justify-center bg-gradient-to-r from-green-500 to-teal-600 cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => document.getElementById('avatar-input')?.click()}
+          >
+            {profile.avatar === 'iFlow' ? (
+              <span className="text-white text-2xl font-bold">iFlow</span>
+            ) : profile.avatarData ? (
+              <img 
+                src={profile.avatarData} 
+                alt="用户头像"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Image
+                src={profile.avatar}
+                alt="用户头像"
+                width={96}
+                height={96}
+                className="w-full h-full object-cover"
+              />
+            )}
           </div>
-          <button className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white hover:bg-primary/80 transition-colors">
+          <button 
+            type="button"
+            onClick={() => document.getElementById('avatar-input')?.click()}
+            className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white hover:bg-primary/80 transition-colors"
+          >
             <i className="fas fa-camera text-sm"></i>
           </button>
         </div>
-        <p className="text-sm text-slate-600 mt-2">点击更换头像</p>
+        <input
+          id="avatar-input"
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          onChange={handleAvatarUpload}
+          className="hidden"
+          disabled={uploading}
+        />
+        {uploading && (
+          <p className="text-sm text-primary mt-2">上传中...</p>
+        )}
+        {uploadError && (
+          <p className="text-sm text-red-500 mt-2">{uploadError}</p>
+        )}
+        <p className="text-sm text-slate-600 mt-2">点击更换头像 (支持 JPG/PNG/GIF/WebP)</p>
       </GlassCard>
 
       {/* 基本信息 */}

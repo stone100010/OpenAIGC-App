@@ -184,7 +184,15 @@ export function CreatorPanel({
       <div className="flex items-center">
         <Link href={`/profile?id=${creator.id}`} className="flex items-center flex-1 hover:opacity-80 transition-opacity cursor-pointer">
           <div className={`w-12 h-12 bg-gradient-to-r ${gradient} rounded-full flex items-center justify-center mr-4 overflow-hidden`}>
-            {creator.avatarUrl ? (
+            {creator.avatarUrl === 'iFlow' ? (
+              <span className="text-white font-bold text-sm">iFlow</span>
+            ) : creator.avatarData ? (
+              <img 
+                src={creator.avatarData} 
+                alt={creator.displayName}
+                className="w-full h-full object-cover"
+              />
+            ) : creator.avatarUrl ? (
               <Image
                 src={creator.avatarUrl}
                 alt={creator.displayName}
@@ -198,7 +206,7 @@ export function CreatorPanel({
                 }}
               />
             ) : null}
-            {!creator.avatarUrl && <i className="fas fa-user text-white" />}
+            {!creator.avatarUrl && !creator.avatarData && <i className="fas fa-user text-white" />}
           </div>
           <div className="flex-1">
             <h4 className="font-medium text-slate-800 hover:text-blue-600 transition-colors">{creator.displayName}</h4>

@@ -8,13 +8,27 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 如果已登录，直接跳转，避免闪烁
+  if (isAuthenticated && !isSubmitting) {
+    router.replace('/profile');
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">正在跳转...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -31,7 +45,9 @@ export default function LoginPage() {
       return;
     }
 
+    setIsSubmitting(true);
     const success = await login(formData.email, formData.password);
+    setIsSubmitting(false);
     
     if (success) {
       router.push('/profile');
@@ -53,7 +69,7 @@ export default function LoginPage() {
         </div>
 
         {/* 登录表单 */}
-        <GlassCard className="animate-bounce-in">
+        <GlassCard>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* 邮箱输入 */}
             <div className="space-y-2">
@@ -112,10 +128,10 @@ export default function LoginPage() {
             {/* 登录按钮 */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting || isLoading}
               className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold py-3 rounded-xl hover:shadow-lg transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
-              {isLoading ? (
+              {(isSubmitting || isLoading) ? (
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                   登录中...
@@ -139,19 +155,19 @@ export default function LoginPage() {
             </div>
 
             {/* 社交登录 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 opacity-50">
               <button
                 type="button"
-                disabled={isLoading}
-                className="flex items-center justify-center px-4 py-3 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors duration-300 disabled:opacity-50"
+                disabled={true}
+                className="flex items-center justify-center px-4 py-3 border border-slate-300 rounded-xl transition-colors duration-300 cursor-not-allowed"
               >
                 <i className="fab fa-google text-red-500 mr-2"></i>
                 <span className="text-sm font-medium text-slate-700">Google</span>
               </button>
               <button
                 type="button"
-                disabled={isLoading}
-                className="flex items-center justify-center px-4 py-3 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors duration-300 disabled:opacity-50"
+                disabled={true}
+                className="flex items-center justify-center px-4 py-3 border border-slate-300 rounded-xl transition-colors duration-300 cursor-not-allowed"
               >
                 <i className="fab fa-github text-slate-800 mr-2"></i>
                 <span className="text-sm font-medium text-slate-700">GitHub</span>

@@ -18,10 +18,12 @@ export async function GET(request: NextRequest) {
           cw.views_count, cw.likes_count, cw.created_at,
           u.username as creator_username,
           u.username as creator_display_name,
-          NULL as creator_avatar,
+          up.avatar_url as creator_avatar,
+          up.avatar_data as creator_avatar_data,
           COUNT(*) OVER() as total_count
         FROM creative_works cw
         LEFT JOIN users u ON cw.creator_id = u.id
+        LEFT JOIN user_profiles up ON u.id = up.user_id
         WHERE cw.is_public = true
       `;
 

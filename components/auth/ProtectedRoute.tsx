@@ -14,7 +14,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace('/auth/login');
+      // 使用 push 而不是 replace，避免不必要的历史记录问题
+      router.push('/auth/login');
     }
   }, [isAuthenticated, isLoading, router]);
 

@@ -75,11 +75,14 @@ export async function GET(request: NextRequest) {
         cw.updated_at,
         u.username as creator_username,
         u.email as creator_email,
+        up.avatar_url as creator_avatar,
+        up.avatar_data as creator_avatar_data,
         cc.name_cn as category_name,
         cc.icon as category_icon,
         cc.color as category_color
       FROM creative_works cw
       LEFT JOIN users u ON cw.creator_id = u.id
+      LEFT JOIN user_profiles up ON u.id = up.user_id
       LEFT JOIN creative_categories cc ON cw.content_type = cc.name
       ${whereClause}
       ${orderByClause}
@@ -108,7 +111,9 @@ export async function GET(request: NextRequest) {
       updated_at: row.updated_at,
       creator: {
         username: row.creator_username,
-        display_name: row.creator_username
+        display_name: row.creator_username,
+        avatar_url: row.creator_avatar || '/20250731114736.jpg',
+        avatar_data: row.creator_avatar_data
       },
       category: row.category_name ? {
         name: row.category_name,

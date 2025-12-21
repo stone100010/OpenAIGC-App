@@ -41,63 +41,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 检查localStorage中的登录状态
+  // 检查localStorage中的登录状态（只在组件挂载时执行一次）
   useEffect(() => {
-    const checkAuth = () => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
       try {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
-        }
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
       } catch (error) {
-        console.error('Error checking auth:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('Error parsing stored user:', error);
+        localStorage.removeItem('user');
       }
-    };
-
-    checkAuth();
+    }
+    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
+    if (!email || !password) return false;
+    
+    setIsLoading(true);
+    
     try {
-      setIsLoading(true);
+      // 立即创建用户数据，不使用延迟
+      const userId = 'ad57ef07-8446-472f-9fda-c0068798a2e0';
       
-      // 模拟API调用延迟
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // 简单的模拟认证 - 支持用户名和邮箱两种登录方式
-      if (email && password) {
-        let userName = email;
-        
-        // 如果是邮箱格式，提取用户名部分
-        if (email.includes('@')) {
-          userName = email.split('@')[0];
+      const mockUser: User = {
+        id: userId,
+        username: 'Odyssey Warsaw',
+        email: email.includes('@') ? email : `${email}@openai.com`,
+        name: 'Odyssey Warsaw',
+        isPro: true,
+        joinDate: '2025年11月23日',
+        stats: {
+          artworks: 92,
+          duration: '150h',
+          likes: 1200
         }
-        
-        // 使用数据库中存在的odyssey用户ID
-        const userId = 'ad57ef07-8446-472f-9fda-c0068798a2e0';
-        
-        const mockUser: User = {
-          id: userId,
-          username: 'Odyssey Warsaw',
-          email: email.includes('@') ? email : `${email}@openai.com`,
-          name: 'Odyssey Warsaw',
-          isPro: true, // 使用数据库中的真实值
-          joinDate: '2025年11月23日',
-          stats: {
-            artworks: 92, // 使用数据库中的真实值
-            duration: '150h',
-            likes: 1200
-          }
-        };
-        
-        setUser(mockUser);
-        localStorage.setItem('user', JSON.stringify(mockUser));
-        return true;
-      }
+      };
       
-      return false;
+      localStorage.setItem('user', JSON.stringify(mockUser));
+      setUser(mockUser);
+      return true;
     } catch (error) {
       console.error('Login error:', error);
       return false;
@@ -107,36 +91,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (name: string, password: string, inviteCode: string): Promise<boolean> => {
+    if (!name || !password || !inviteCode) return false;
+    
+    setIsLoading(true);
+    
     try {
-      setIsLoading(true);
+      // 立即创建用户数据，不使用延迟
+      const userId = generateUUID();
       
-      // 模拟API调用延迟
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      const newUser: User = {
+        id: userId,
+        username: name,
+        email: `${name}@openai.com`,
+        name,
+        avatar: 'iFlow',
+        isPro: false,
+        joinDate: new Date().toLocaleDateString('zh-CN'),
+        stats: {
+          artworks: 0,
+          duration: '0h',
+          likes: 0
+        }
+      };
       
-      if (name && password && inviteCode) {
-        // 生成UUID格式的用户ID
-        const userId = generateUUID();
-        
-        const newUser: User = {
-          id: userId,
-          username: name,
-          email: `${name}@openai.com`, // 生成临时邮箱
-          name,
-          isPro: false,
-          joinDate: new Date().toLocaleDateString('zh-CN'),
-          stats: {
-            artworks: 0,
-            duration: '0h',
-            likes: 0
-          }
-        };
-        
-        setUser(newUser);
-        localStorage.setItem('user', JSON.stringify(newUser));
-        return true;
-      }
-      
-      return false;
+      localStorage.setItem('user', JSON.stringify(newUser));
+      setUser(newUser);
+      return true;
     } catch (error) {
       console.error('Register error:', error);
       return false;

@@ -18,6 +18,7 @@ interface UserProfile {
   email: string;
   bio: string;
   avatar: string;
+  avatarData?: string;
   location: string;
   website: string;
   isPro: boolean;
@@ -89,10 +90,32 @@ function ProfileContent() {
         headers: getAuthHeaders()
       });
 
+      // 检查响应状态
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
 
       if (data.success) {
-        setProfileData(data.data);
+        // 如果返回的是mock数据（包含mock字样），优先使用AuthContext的用户信息
+        if (data.message && data.message.includes('mock') && user) {
+          setProfileData({
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            bio: data.data.bio || '',
+            avatar: data.data.avatar || '/20250731114736.jpg',
+            avatarData: data.data.avatarData,
+            location: data.data.location || '',
+            website: data.data.website || '',
+            isPro: user.isPro,
+            joinDate: user.joinDate
+          });
+        } else {
+          setProfileData(data.data);
+        }
       } else {
         console.error('获取用户档案失败:', data.message);
         // 如果API失败，使用AuthContext中的数据作为备选
@@ -181,14 +204,24 @@ function ProfileContent() {
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
             {/* 头像 */}
             <div className="relative">
-              <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg">
-                <Image
-                  src={profileData.avatar}
-                  alt={`${profileData.name} 用户头像`}
-                  width={96}
-                  height={96}
-                  className="w-full h-full object-cover"
-                />
+              <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg flex items-center justify-center bg-gradient-to-r from-green-500 to-teal-600">
+                {profileData.avatar === 'iFlow' ? (
+                  <span className="text-white text-2xl font-bold">iFlow</span>
+                ) : profileData.avatarData ? (
+                  <img 
+                    src={profileData.avatarData} 
+                    alt={`${profileData.name} 用户头像`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Image
+                    src={profileData.avatar}
+                    alt={`${profileData.name} 用户头像`}
+                    width={96}
+                    height={96}
+                    className="w-full h-full object-cover"
+                  />
+                )}
               </div>
               {profileData.isPro && (
                 <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">

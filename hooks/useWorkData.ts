@@ -60,6 +60,7 @@ export function useWorkData(workId: string | null): UseWorkDataResult {
             username: work.creator?.username || work.creator_username || 'unknown',
             displayName: work.creator?.display_name || work.creator?.displayName || work.creator_display_name || '未知用户',
             avatarUrl: work.creator?.avatar_url || work.creator?.avatarUrl || work.creator_avatar || '/20250731114736.jpg',
+            avatarData: work.creator?.avatar_data || work.creator?.avatarData || work.creator_avatar_data,
             bio: work.creator?.bio
           },
           contentData: work.content_data || work.contentData

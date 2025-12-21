@@ -11,6 +11,7 @@ export interface Creator {
   username: string;
   displayName: string;
   avatarUrl: string;
+  avatarData?: string;
   bio?: string;
 }
 
@@ -127,6 +128,7 @@ export function formatWorkData(row: Record<string, unknown>): WorkData {
       username: (row.creator_username as string) || 'unknown',
       displayName: (row.creator_display_name as string) || (row.creator_username as string) || '未知用户',
       avatarUrl: (row.creator_avatar as string) || '/20250731114736.jpg',
+      avatarData: row.creator_avatar_data as string | undefined,
       bio: row.creator_bio as string | undefined
     },
     contentData: row.content_data as Record<string, unknown> | undefined
@@ -152,7 +154,8 @@ export function formatWorkListItem(row: Record<string, unknown>): WorkListItem {
     creator: {
       username: (row.creator_username as string) || 'unknown',
       displayName: (row.creator_display_name as string) || '未知用户',
-      avatarUrl: (row.creator_avatar as string) || '/20250731114736.jpg'
+      avatarUrl: (row.creator_avatar as string) || '/20250731114736.jpg',
+      avatarData: row.creator_avatar_data as string | undefined
     }
   };
 }

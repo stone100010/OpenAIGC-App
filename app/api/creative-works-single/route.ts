@@ -36,10 +36,12 @@ export async function GET(request: NextRequest) {
           cw.creator_id,
           u.username as creator_username,
           u.username as creator_display_name,
-          NULL as creator_avatar,
-          NULL as creator_bio
+          up.avatar_url as creator_avatar,
+          up.avatar_data as creator_avatar_data,
+          up.bio as creator_bio
         FROM creative_works cw
         LEFT JOIN users u ON cw.creator_id = u.id
+        LEFT JOIN user_profiles up ON u.id = up.user_id
         WHERE cw.id = $1 AND cw.is_public = true
       `;
 

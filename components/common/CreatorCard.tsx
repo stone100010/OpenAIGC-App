@@ -27,8 +27,16 @@ export default function CreatorCard({
     <div className={`glass rounded-2xl p-4 ${className}`}>
       <div className="flex items-center gap-3">
         {/* 头像 */}
-        <div className="relative w-12 h-12 rounded-full overflow-hidden ring-2 ring-white/50 bg-gradient-to-r from-blue-400 to-purple-500">
-          {creator.avatarUrl ? (
+        <div className="relative w-12 h-12 rounded-full overflow-hidden ring-2 ring-white/50 bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center">
+          {creator.avatarUrl === 'iFlow' ? (
+            <span className="text-white font-bold text-sm">iFlow</span>
+          ) : creator.avatarData ? (
+            <img 
+              src={creator.avatarData} 
+              alt={creator.displayName}
+              className="w-full h-full object-cover"
+            />
+          ) : creator.avatarUrl ? (
             <Image
               src={creator.avatarUrl}
               alt={creator.displayName}
@@ -41,9 +49,11 @@ export default function CreatorCard({
               }}
             />
           ) : null}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <i className="fas fa-user text-white text-lg"></i>
-          </div>
+          {!creator.avatarUrl && !creator.avatarData && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <i className="fas fa-user text-white text-lg"></i>
+            </div>
+          )}
         </div>
 
         {/* 信息 */}
@@ -85,8 +95,16 @@ export function CreatorInfo({
 
   return (
     <div className="flex items-center gap-2">
-      <div className={`relative ${avatarSize} rounded-full overflow-hidden bg-gradient-to-r from-blue-400 to-purple-500`}>
-        {creator.avatarUrl ? (
+      <div className={`relative ${avatarSize} rounded-full overflow-hidden bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center`}>
+        {creator.avatarUrl === 'iFlow' ? (
+          <span className="text-white font-bold text-xs">iFlow</span>
+        ) : creator.avatarData ? (
+          <img 
+            src={creator.avatarData} 
+            alt={creator.displayName}
+            className="w-full h-full object-cover"
+          />
+        ) : creator.avatarUrl ? (
           <Image
             src={creator.avatarUrl}
             alt={creator.displayName}
@@ -99,9 +117,11 @@ export function CreatorInfo({
             }}
           />
         ) : null}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <i className="fas fa-user text-white"></i>
-        </div>
+        {!creator.avatarUrl && !creator.avatarData && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <i className="fas fa-user text-white"></i>
+          </div>
+        )}
       </div>
       <span className={`${textSize} text-slate-600 truncate`}>
         {creator.displayName}

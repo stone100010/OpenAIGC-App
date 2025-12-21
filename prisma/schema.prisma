@@ -57,6 +57,7 @@ model UserProfile {
   userId      String   @unique
   displayName String?
   avatarUrl   String?
+  avatarData  String?  // Base64编码的头像数据，100x100px
   bio         String?
   joinDate    DateTime @default(now())
   timezone    String   @default("UTC")
